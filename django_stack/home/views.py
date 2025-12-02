@@ -17,3 +17,10 @@ def is_new_years(request): #Basic new years condition
     return render(request, "home/new_years.html", {
         "newyear": result
     })
+
+from .models import User
+
+def sql_test(request):
+    return render(request, "home/sql_test.html", {
+        "users":User.objects.all()
+    })
