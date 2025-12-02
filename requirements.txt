@@ -1,12 +1,10 @@
-asgiref @ file:///home/conda/feedstock_root/build_artifacts/asgiref_1763585112330/work
+asgiref==3.8.1
 brotli==1.2.0
 dj-database-url==3.0.1
-Django @ file:///home/conda/feedstock_root/build_artifacts/django_1762777100038/work
+Django==5.2.2
 gunicorn==23.0.0
 packaging==25.0
-psycopg2==2.9.11
-setuptools==80.9.0
-sqlparse @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_sqlparse_1764433038/work
-typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_typing_extensions_1756220668/work
-wheel==0.45.1
+psycopg2-binary==2.9.11
+sqlparse==0.5.3
+typing_extensions==4.12.2
 whitenoise==6.11.0
