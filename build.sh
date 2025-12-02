@@ -9,5 +9,5 @@ pip install -r requirements.txt
 cd django_stack
 python manage.py collectstatic --no-input
 
-# Apply any outstanding database migrations
+# Apply any outstanding database migrations (not yet!)
 python manage.py migrate 
