@@ -1,0 +1,12 @@
+{% extends "to_do_list/layout.html" %}
+
+{% block body %}
+    <h1> To-Do List </h1>
+    <ul>
+        {% for item in tasks %}
+            <li>{{ item }}</li>
+        {% empty %}
+            <li>No tasks yet.</li>
+        {% endfor %}
+    </ul>
+{% endblock %}

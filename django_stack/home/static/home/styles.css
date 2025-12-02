@@ -1,0 +1,14 @@
+/* Styling for new_years.html */
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+}
+
+h1, h2 {
+    text-align: center;
+    font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+}
