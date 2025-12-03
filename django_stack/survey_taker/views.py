@@ -92,7 +92,7 @@ def process_response(request, survey_id):
     
     # Get the survey parameters (with caching) - params_dict is already parsed
     survey_params, params_dict = get_survey_params_cached(survey_id)
-    params_dict = TEST_PARAMS #Overwrite with these params for, well you know, testing
+    #params_dict = TEST_PARAMS #Overwrite with these params for, well you know, testing
     try:
         # Parse the incoming JSON data
         data = json.loads(request.body)
