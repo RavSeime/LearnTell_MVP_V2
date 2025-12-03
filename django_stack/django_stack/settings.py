@@ -37,6 +37,7 @@ ALLOWED_HOSTS = ['intervjubot-django.onrender.com', 'localhost', '127.0.0.1']
 
 INSTALLED_APPS = [
     'home',
+    'survey_taker',
     'to_do_list',
     'django.contrib.admin',
     'django.contrib.auth',

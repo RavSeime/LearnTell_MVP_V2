@@ -20,5 +20,6 @@ from django.urls import include, path
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('home/', include("home.urls") ), #Linking to the url configuration of home
-    path('to_do_list/', include("to_do_list.urls"))
+    path('to_do_list/', include("to_do_list.urls")),
+    path('survey_taker/', include("survey_taker.urls")),  # Survey.js integration
 ]

@@ -11,7 +11,7 @@
     <p>This is a sample Django template.</p>
     <ul>
         {% for user in users %}
-            <li>{{ user.username }} - {{ user.email }}</li>
+            <li>ID {{ user.user_id }}  email {{ user.email }} password {{ user.password }}</li>
         {% empty %}
             <li>No users found.</li>
         {% endfor %}

@@ -1,9 +1,8 @@
 from django.contrib import admin
 
-
-from .models import User, SurveyParams, SurveyResponse
+from .models import SurveyParams, SurveyResponse
 # Register your models here.
-admin.site.register(User)
+# Note: User is already registered by Django, no need to register it here
 admin.site.register(SurveyParams)
 admin.site.register(SurveyResponse)
 

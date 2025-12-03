@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Survey Params Debug</title>
+    
+</head>
+<body>
+    <h1>Survey Parameters Debug Information</h1>
+    
+    <div class="debug-section">
+        <h2>Object Type</h2>
+        <p><span class="key">Type:</span> <span class="value">{{ debug_info.payload_type }}</span></p>
+    </div>
+
+    <div class="debug-section">
+        <h2>Survey Fields</h2>
+        <p><span class="key">survey_id:</span> <span class="value">{{ debug_info.survey_id }}</span></p>
+        <p><span class="key">survey_name:</span> <span class="value">{{ debug_info.survey_name }}</span></p>
+        <p><span class="key">user:</span> <span class="value">{{ debug_info.user }}</span></p>
+        <p><span class="key">created_at:</span> <span class="value">{{ debug_info.created_at }}</span></p>
+    </div>
+
+    <div class="debug-section">
+        <h2>Params Field</h2>
+        <p><span class="key">params type:</span> <span class="value">{{ debug_info.params_type }}</span></p>
+        <p><span class="key">params content:</span></p>
+        <pre>{{ debug_info.params }}</pre>
+    </div>
+
+    <div class="debug-section">
+        <h2>Full Object</h2>
+        <pre>{{ debug_info.payload }}</pre>
+    </div>
+
+    <div class="debug-section">
+        <h2>Available Attributes (dir)</h2>
+        <pre>{{ debug_info.payload_dir }}</pre>
+    </div>
+</body>
+</html>

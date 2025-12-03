@@ -1,13 +1,31 @@
-<!DOCTYPE html>
-<html lang="en">    
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home Page</title>
-</head>
-<body>
-    <h1>Welcome to the Home Page</h1>
-    <p>This is a sample Django template.</p>
-</body>
-</html>
+{% extends "home/layout.html" %}
+{% block body %}
+    <h1>My Surveys</h1>
+    
+    {% if surveys %}
+        <table border="1" cellpadding="10">
+            <thead>
+                <tr>
+                    <th>Survey Name</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for survey in surveys %}
+                    <tr>
+                        <td>{{ survey.survey_name }}</td>
+                        <td>{{ survey.created_at|date:"Y-m-d H:i" }}</td>
+                        <td>
+                            <a href="{% url 'edit_survey' survey.survey_id %}">
+                                <button>Edit</button>
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No surveys found. Create your first survey!</p>
+    {% endif %}
+{% endblock %}

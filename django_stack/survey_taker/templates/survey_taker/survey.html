@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ survey_name }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- SurveyJS (vanilla) - stable version -->
+  <link href="https://unpkg.com/survey-jquery@1.9.116/defaultV2.min.css" rel="stylesheet" />
+  <script src="https://unpkg.com/jquery@3.6.0/dist/jquery.min.js"></script>
+  <script src="https://unpkg.com/survey-jquery@1.9.116/survey.jquery.min.js"></script>
+
+  <!-- Custom styles -->
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'survey_taker/survey_styles.css' %}">
+</head>
+<body>
+  <div class="shell">
+    <div id="surveyContainer">
+      <div id="preloadMsg" style="padding:12px;color:#666;font-size:14px">Loading survey...</div>
+    </div>
+  </div>
+
+  <script>
+    console.log("Script started");
+    
+    // Survey configuration from Django
+    const SURVEY_ID = "{{ survey_id }}";
+    const SURVEY_NAME = "{{ survey_name }}";
+    const SURVEY_PARAMS = {{ survey_params|safe }};
+    const API_ENDPOINT = `/survey_taker/api/response/${SURVEY_ID}/`;
+    
+    // Generate unique respondent ID
+    const RESPONDENT_ID = 'R_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    // Store conversation in frontend (for scalability - no DB writes until completion)
+    let conversation = [];
+    let messageOrder = 0;
+    
+    console.log("Survey config:", { SURVEY_ID, SURVEY_NAME, API_ENDPOINT, RESPONDENT_ID });
+
+    // SurveyJS configuration with chat UI
+    const surveyJson = {
+      showQuestionNumbers: "off",
+      completedHtml: "<h3>Thank you for completing the survey!</h3>",
+      pages: [{
+        name: "chat_page",
+        elements: [
+          // Chat UI (matching your provided HTML)
+          {
+            type: "html",
+            name: "chat_ui",
+            html: '<div style="width: 95%; margin-left: auto; margin-right: auto; min-width: 300px; max-width: 800px; background-color: #fff; display: flex; flex-direction: column; padding: 1px; height: 700px; border: 20px solid white; border-radius: 15px;" class="chat-container"><div style="overflow-y: scroll; height: calc(100% - 200px); margin-bottom: 5px; border: 2px solid #ddd; border-radius: 5px; padding: 10px; display: flex; flex-direction: column; align-items: flex-end; background-color: #fff;" id="chatArea" class="chat-area">&nbsp;</div><div style="position: relative; margin-top: 5px;" class="input-container"><textarea style="width: calc(100% - 24px); resize: vertical; font-size: 18px; min-height: 150px; max-height: 150px; border: 2px solid #A9A9A9; border-radius: 10px; padding: 10px; overflow: auto;" placeholder="Write your answer here..." maxlength="3000" id="inputBox" class="input-box"></textarea></div><div style="display: flex; justify-content: flex-end; padding-top: 10px;" class="submit-button-container"><div style="flex-grow: 1; font-size: 18px; border: none; height: 30px; line-height: 1.2; padding-left: 10px; color: rgb(53, 53, 53);">Please write complete sentences.</div><button style="background-color: #000; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 18px;" id="submitButton" class="submit-button">Submit answer</button></div></div>'
+          }
+        ]
+      }]
+    };
+
+    // Error handling
+    function showLibError(msg) {
+      console.error("Library error:", msg);
+      const el = document.getElementById('surveyContainer');
+      if (el) {
+        el.innerHTML = `<div style="padding:16px;border:1px solid #7f1d1d;color:#dc2626;background:#fef2f2;border-radius:8px;margin:20px;">${msg}</div>`;
+      }
+    }
+
+    // Main initialization
+    if (!window.Survey || !Survey.Model) {
+      showLibError('SurveyJS library failed to load. Please refresh the page.');
+    } else {
+      const survey = new Survey.Model(surveyJson);
+      survey.completeText = "Complete Survey";
+
+      // Handle survey completion - save conversation to database
+      survey.onComplete.add((sender) => {
+        console.log("Saving conversation to database...", conversation);
+        
+        fetch(`/survey_taker/api/complete/${SURVEY_ID}/`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie('csrftoken')
+          },
+          body: JSON.stringify({ 
+            respondent_id: RESPONDENT_ID,
+            conversation: conversation
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log("Conversation saved successfully:", data);
+        })
+        .catch(error => {
+          console.error("Error saving conversation:", error);
+        });
+      });
+
+      // Initialize chat logic when HTML question is rendered
+      survey.onAfterRenderQuestion.add((sender, options) => {
+        if (options.question.name !== "chat_ui" || options.question.__chatInitialized) return;
+        options.question.__chatInitialized = true;
+
+        const root = options.htmlElement;
+        const chatArea = root.querySelector('#chatArea');
+        const inputField = root.querySelector('#inputBox');
+        const submitButton = root.querySelector('#submitButton');
+
+        if (!chatArea || !inputField || !submitButton) {
+          console.error('Chat UI elements not found');
+          return;
+        }
+
+        // Helper function to append messages
+        function appendChatbotMessage(message, status) {
+          const messageContent = document.createElement('div');
+          messageContent.style.cssText = "word-wrap: break-word; width: 80%; border: 1px solid #F6F6F6; border-radius: 5px; padding: 5px; margin-bottom: 10px; background-color: #F6F6F6; display: block; margin-right: auto; font-size: 18px; line-height: 1.5;";
+          
+          if (status === "waiting") {
+            messageContent.innerHTML = `
+              <div style="word-wrap: break-word;">
+                <div id="wave" style="position:relative; vertical-align: center; text-align:left;">
+                  <span class="dot" style="display:inline-block; width:12px; height:6px; border-radius:50%; margin-right:3px; background:#303131; animation: wave 1.3s linear infinite;"></span>
+                  <span class="dot" style="display:inline-block; width:12px; height:6px; border-radius:50%; margin-right:3px; background:#303131; animation: wave 1.3s linear infinite; animation-delay: -1.1s;"></span>
+                  <span class="dot" style="display:inline-block; width:12px; height:6px; border-radius:50%; margin-right:3px; background:#303131; animation: wave 1.3s linear infinite; animation-delay: -0.9s;"></span>
+                </div>
+              </div>
+            `;
+            messageContent.id = "dancingDots";
+          } else if (status === "response") {
+            const existingDots = root.querySelector('#dancingDots');
+            if (existingDots) {
+              existingDots.innerText = message.trim();
+              existingDots.removeAttribute('id');
+              chatArea.scrollTop = chatArea.scrollHeight;
+              return;
+            } else {
+              messageContent.innerText = message.trim();
+            }
+          }
+          
+          chatArea.appendChild(messageContent);
+          chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        // Get first question from backend
+        appendChatbotMessage("", "waiting");
+        
+        fetch(API_ENDPOINT, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie('csrftoken')
+          },
+          body: JSON.stringify({ 
+            user_message: "", 
+            respondent_id: RESPONDENT_ID
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          const question = (data.message || "").trim();
+          appendChatbotMessage(question, "response");
+          
+          // Store first question in conversation
+          messageOrder++;
+          conversation.push({
+            order: messageOrder,
+            message: question,
+            is_question: true
+          });
+        })
+        .catch(error => {
+          console.error("Error:", error);
+          appendChatbotMessage("Error loading survey. Please try again.", "response");
+        });
+
+        // Handle submit button click
+        submitButton.addEventListener("click", function () {
+          const userMessage = inputField.value.trim();
+          
+          if (userMessage) {
+            inputField.value = "";
+            submitButton.disabled = true;
+            submitButton.style.backgroundColor = '#ccc';
+            submitButton.innerText = "Waiting...";
+            
+            // Add user message to chat
+            const messageContent = document.createElement('div');
+            messageContent.style.cssText = "display: inline-block; max-width: 80%; border: 1px solid #ddd; border-radius: 5px; padding: 5px; margin-bottom: 10px; background-color: #ddd; word-wrap: break-word; font-size: 18px; text-align: left; line-height: 1.5;";
+            messageContent.innerText = userMessage;
+            chatArea.appendChild(messageContent);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            
+            // Store user answer in conversation
+            messageOrder++;
+            conversation.push({
+              order: messageOrder,
+              message: userMessage,
+              is_question: false
+            });
+            
+            appendChatbotMessage("", "waiting");
+            
+            // Send to backend
+            fetch(API_ENDPOINT, {
+              method: "POST",
+              headers: { 
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie('csrftoken')
+              },
+              body: JSON.stringify({ 
+                user_message: userMessage, 
+                respondent_id: RESPONDENT_ID
+              })
+            })
+            .then(response => response.json())
+            .then(data => {
+              let next_question = (data.message || "").trim();
+              
+              // Store AI question in conversation
+              messageOrder++;
+              conversation.push({
+                order: messageOrder,
+                message: next_question.replace("---END---", "").trim(),
+                is_question: true
+              });
+              
+              // Check for end of interview
+              if (next_question.includes("---END---")) {
+                next_question = next_question.replace("---END---", "").trim();
+                submitButton.disabled = true;
+                submitButton.innerText = "Survey completed";
+                submitButton.style.backgroundColor = '#ccc';
+                
+                // Enable the Survey.js Complete button
+                window.survey.doComplete();
+              } else {
+                submitButton.disabled = false;
+                submitButton.innerText = "Submit answer";
+                submitButton.style.backgroundColor = '#000';
+              }
+              
+              appendChatbotMessage(next_question, "response");
+            })
+            .catch(error => {
+              console.error("Error:", error);
+              appendChatbotMessage("Error processing response. Please try again.", "response");
+              submitButton.disabled = false;
+              submitButton.style.backgroundColor = '#000';
+              submitButton.innerText = "Submit answer";
+            });
+          }
+        });
+      });
+
+      // Helper to get CSRF token
+      function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+          const cookies = document.cookie.split(';');
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+              cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+              break;
+            }
+          }
+        }
+        return cookieValue;
+      }
+
+      // Render survey
+      const preload = document.getElementById('preloadMsg');
+      if (preload) preload.remove();
+      
+      $("#surveyContainer").Survey({ model: survey });
+      window.survey = survey; // For debugging
+    }
+  </script>
+</body>
+</html>

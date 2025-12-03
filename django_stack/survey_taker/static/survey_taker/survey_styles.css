@@ -1,0 +1,234 @@
+body { 
+  background: white;
+  margin: 0; 
+  font-family: Arial, Helvetica, sans-serif; 
+  color: #353535; 
+  min-height: 100vh;
+}
+
+.shell { 
+  max-width: 600px; 
+  margin: 20px auto; 
+  padding: 0px; 
+}
+
+#surveyContainer {
+  background: transparent;
+  padding: 0px;
+  border-radius: 0px;
+  box-shadow: none;
+}
+
+/* Style the survey page with rounded corners - but NOT the footer/nav */
+.sv_container, .sv_p_root, .sd-page {
+  background-color: white !important;
+  border-radius: 15px !important;
+}
+
+/* Keep body transparent so footer can be transparent */
+.sv_main, .sd-root-modern, .sv_body, .sd-body {
+  background-color: transparent !important;
+}
+
+/* Add shadow only to the page content, not footer */
+.sv_p_root, .sd-page {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+  overflow: hidden !important;
+}
+
+/* Make footer transparent and outside the white box */
+.sv_nav, .sv_footer, .sd-footer, .sd-action-bar,
+.sv_nav *, .sv_footer *, .sd-footer *, .sd-action-bar * {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Animation for dancing dots */
+@keyframes wave {
+  0%, 60%, 100% { transform: initial; }
+  30% { transform: translateY(-7px); }
+}
+
+/* Style the SurveyJS Complete button */
+.sv_complete_btn, 
+.sv-btn--navigation.sv-footer__complete-btn,
+input[type="button"][value="Complete"],
+.sd-btn--action.sd-navigation__complete-btn {
+  background-color: #000 !important;
+  color: white !important;
+  border: none !important;
+  padding: 10px 20px !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  font-size: 24px !important;
+}
+
+/* Position the button container */
+.sv_nav, .sv_footer, .sd-footer, .sd-action-bar {
+  width: 95% !important;
+  max-width: 800px !important;
+  margin: 30px auto 0 auto !important;
+  padding: 0 !important;
+  text-align: right !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  background: transparent !important;
+}
+
+/* Subtle gray background for input box */
+#inputBox {
+  background-color: #F9F9F9 !important;
+}
+
+/* Mobile Responsive Styles */
+@media only screen and (max-width: 768px) {
+  .shell {
+    margin: 10px auto !important;
+    padding: 0 !important;
+  }
+  
+  /* Make chat container full width on mobile */
+  .chat-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 10px solid white !important;
+    border-radius: 10px !important;
+    height: calc(100vh - 100px) !important;
+  }
+  
+  /* Adjust chat area height for mobile */
+  #chatArea {
+    height: calc(100% - 180px) !important;
+    font-size: 16px !important;
+  }
+  
+  /* Make input box better for mobile */
+  #inputBox {
+    font-size: 16px !important;
+    min-height: 100px !important;
+    max-height: 120px !important;
+  }
+  
+  /* Make buttons touch-friendly */
+  #submitButton {
+    padding: 12px 24px !important;
+    font-size: 16px !important;
+    min-height: 44px !important;
+  }
+  
+  /* Adjust complete button for mobile */
+  .sv_complete_btn, 
+  .sv-btn--navigation.sv-footer__complete-btn,
+  input[type="button"][value="Complete"],
+  .sd-btn--action.sd-navigation__complete-btn {
+    padding: 12px 24px !important;
+    font-size: 20px !important;
+    min-height: 44px !important;
+    min-width: 60px !important;
+  }
+  
+  /* Adjust footer spacing on mobile */
+  .sv_nav, .sv_footer, .sd-footer, .sd-action-bar {
+    width: 100% !important;
+    margin: 15px auto 0 auto !important;
+    padding: 0 10px !important;
+  }
+  
+  /* Make text instruction smaller on mobile */
+  .submit-button-container > div {
+    font-size: 14px !important;
+    padding-left: 5px !important;
+  }
+  
+  /* Adjust survey container for mobile */
+  #surveyContainer {
+    padding: 0 !important;
+    border-radius: 10px !important;
+  }
+  
+  /* Ensure chat messages are readable on mobile */
+  .chat-area > div {
+    font-size: 16px !important;
+    max-width: 85% !important;
+  }
+}
+
+/* Extra small devices (phones in portrait, including iPhone SE) */
+@media only screen and (max-width: 480px) {
+  body {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .shell {
+    margin: 5px !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  
+  .chat-container {
+    border: 3px solid white !important;
+    height: calc(100vh - 80px) !important;
+    width: calc(100% - 10px) !important;
+    margin-left: 5px !important;
+    margin-right: 5px !important;
+  }
+  
+  #inputBox {
+    min-height: 80px !important;
+    max-height: 100px !important;
+  }
+  
+  .submit-button-container > div {
+    font-size: 12px !important;
+  }
+  
+  /* Adjust footer to prevent overflow */
+  .sv_nav, .sv_footer, .sd-footer, .sd-action-bar {
+    width: calc(100% - 10px) !important;
+    padding: 0 5px !important;
+  }
+}
+
+/* iPhone SE and very small devices (≤320px) */
+@media only screen and (max-width: 320px) {
+  .chat-container {
+    border: 2px solid white !important;
+    width: calc(100% - 6px) !important;
+    margin-left: 3px !important;
+    margin-right: 3px !important;
+  }
+  
+  .shell {
+    margin: 3px !important;
+  }
+  
+  .sv_nav, .sv_footer, .sd-footer, .sd-action-bar {
+    width: calc(100% - 6px) !important;
+    padding: 0 3px !important;
+  }
+}
+
+/* Style completion message */
+.sv_completed_page, .sd-completedpage {
+  text-align: center !important;
+  padding: 40px 20px !important;
+  background-color: white !important;
+  border-radius: 15px !important;
+  margin: 20px !important;
+}
+
+.sv_completed_page h3, .sd-completedpage h3 {
+  color: #353535 !important;
+  font-size: 24px !important;
+  font-weight: normal !important;
+  margin: 0 !important;
+}
+
+@media only screen and (max-width: 480px) {
+  .sv_completed_page h3, .sd-completedpage h3 {
+    font-size: 20px !important;
+  }
+}

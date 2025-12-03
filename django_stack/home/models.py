@@ -1,30 +1,16 @@
 from django.db import models
+from django.contrib.auth.models import User
 import uuid
 # Create your models here.
 
 
-class User(models.Model):
-    user_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True)
-    password = models.EmailField()
-
-    def __str__(self):
-        return self.username  # Display in admin and debugging
-    
-    def get_survey_count(self):
-        return self.surveyparams_set.count()
-
 class SurveyParams(models.Model):
+    survey_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     survey_name = models.CharField(max_length=100)
     params = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
     
-    class Meta:
-        unique_together = ['user', 'survey_name']  # Composite unique constraint
-        # Or in newer Django:
-        constraints = [
-            models.UniqueConstraint(fields=['user', 'survey_name'], name='unique_user_survey')
-        ]
     def __str__(self):
         return f"{self.user.username} - {self.survey_name}"
     
@@ -34,9 +20,13 @@ class SurveyParams(models.Model):
     def get_latest_response(self):
         return self.surveyresponse_set.order_by('-submitted_at').first()
     
+    class Meta:
+        unique_together = ['user', 'survey_name']
+        verbose_name_plural = "Survey Parameters"
+    
 
 class SurveyResponse(models.Model):
-    survey = models.ForeignKey(SurveyParams, on_delete=models.CASCADE)
+    survey = models.ForeignKey(SurveyParams, on_delete=models.CASCADE)  # Fixed: renamed from survey_id to survey
     respondent_id = models.CharField(max_length=100)
     responses = models.JSONField()
     submitted_at = models.DateTimeField(auto_now_add=True)
@@ -48,4 +38,5 @@ class SurveyResponse(models.Model):
         return self.survey.user
     
     class Meta:
-        unique_together = ['survey', 'respondent_id']
+        unique_together = ['survey', 'respondent_id']  # Fixed: use 'survey' not 'survey_id'
+        ordering = ['-submitted_at']

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>IntervjuBot</title>
+</head>
+<body>
+    {% if user.is_authenticated %}
+     <p> Hello, {{ user.username }}! </p>
+     <a href="{% url 'logout' %}">Logout</a>
+    {% else %}
+     <p> Not logged in</p>
+     <a href="{% url 'login' %}">Login</a>
+    {% endif %}
+    <div class="top-banner">
+        <a href="{% url 'to_do_list:index' %}">Home</a> 
+        <a href="{% url 'to_do_list:add' %}">Add Task</a>
+    </div>
+    
+    {% block body %}
+    {% endblock %}
+</body>
+</html>
