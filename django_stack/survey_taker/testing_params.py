@@ -4,7 +4,7 @@ TEST_PARAMS = {
     'prompt': 'Interview the participant about their banana preferences',
     'other_params': {
         'temp': 'True',
-        'model': 'gpt-4o',
+        'model': 'sigma model',
         'temp_val': '2'
     }
 }
