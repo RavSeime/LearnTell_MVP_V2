@@ -134,6 +134,10 @@ def process_response(request, survey_id):
         # Initialize or retrieve conversation log from session
         conversation_log = request.session.get('conversation_log', [])
 
+        #Initialize or retrive index of current topic
+        current_topic_index = request.session.get("current_topic_index", 0)
+        nr_questions_asked_current_topic = request.session.get("nr_questions_asked_current_topic", 0)
+
         # === DEBUG START ===
         print(f"[DEBUG] conversation_log length: {len(conversation_log)}")
         # === DEBUG END ===
@@ -156,7 +160,7 @@ def process_response(request, survey_id):
         # === DEBUG END ===
         
         # Call LangGraph architecture
-        next_question = get_response(params_dict, conversation_log, api_key)
+        next_question = get_response(params_dict, current_topic_index,  conversation_log, api_key)
         
         # === DEBUG START ===
         t_after_get_response = time.time()
@@ -173,11 +177,27 @@ def process_response(request, survey_id):
         
         # Save updated conversation log to session
         request.session['conversation_log'] = conversation_log
+        
+        # Incrementing nr of questions asked in current topic
+        nr_questions_asked_current_topic += 1
+        
+        # Check if we need to move to next topic
+        if current_topic_index < len(params_dict["interview_plan"]):
+            topic_length = params_dict["interview_plan"][current_topic_index]["length"]
+            if nr_questions_asked_current_topic >= topic_length:
+                current_topic_index += 1
+                nr_questions_asked_current_topic = 0
+        
+        # Save topic tracking to session
+        request.session['current_topic_index'] = current_topic_index
+        request.session['nr_questions_asked_current_topic'] = nr_questions_asked_current_topic
+        
         t_after_session = time.time()
 
         # === DEBUG START ===
         print(f"[TIMING] Session save: {(t_after_session - t_before_session) * 1000:.2f}ms")
         print(f"[DEBUG] Conversation log updated, length: {len(conversation_log)}")
+        print(f"[DEBUG] Topic: {current_topic_index}, Question {nr_questions_asked_current_topic}/{topic_length if current_topic_index < len(params_dict['interview_plan']) else 'done'}")
         # === DEBUG END ===
         
         # Calculate processing time

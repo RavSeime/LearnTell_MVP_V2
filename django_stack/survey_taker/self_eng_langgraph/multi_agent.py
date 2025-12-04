@@ -9,7 +9,7 @@ def test_create_agent(params, key):
                             checkpointer = InMemorySaver())
     return "bingus"
 
-def get_response(params, conversation_log, key, debug_caching=True):
+def get_response(params, current_topic_index, conversation_log, key, debug_caching=True):
     import time
     from langchain_openai import ChatOpenAI
     from langchain.chat_models import init_chat_model
@@ -24,6 +24,9 @@ def get_response(params, conversation_log, key, debug_caching=True):
         tuple(sorted(params["prompter_llm"]["kwargs"].items()))
     )
     
+    #Logic for picking out right topic_param, based on conversation log
+
+
     t_before_init = time.time()
     # Check cache first
     if cache_key in _model_cache:
@@ -42,8 +45,16 @@ def get_response(params, conversation_log, key, debug_caching=True):
         t_after_init = time.time()
         print(f"[TIMING] init_chat_model: {(t_after_init - t_before_init) * 1000:.2f}ms (created)")
 
+
+
+
     t_before_messages = time.time()
-    messages = [SystemMessage(content=params["prompter_llm"]["prompt"])]
+
+    system_prompt = params["prompter_llm"]["prompt"].format(
+        current_topic = params["interview_plan"][current_topic_index]["topic"]
+    )
+
+    messages = [SystemMessage(content=system_prompt)]
     messages.extend(
         AIMessage(content=entry['content']) if entry.get('is_question') in ('1', 1, True)
         else HumanMessage(content=entry['content'])
