@@ -6,10 +6,29 @@ from home.models import SurveyParams, SurveyResponse
 import json
 import uuid
 import ast
+import time
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 from .testing_params import TEST_PARAMS
+from .self_eng_langgraph.multi_agent import get_response, test_create_agent
 
-# Create your views here.
+# Toggle debug timing
+DEBUG_TIMING = True
 
+# Load .env file explicitly
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+# Get api key
+api_key = os.getenv('OPENAI_API_KEY')
+
+# === DEBUG START ===
+print(f"[DEBUG] .env loaded from: {os.path.join(BASE_DIR, '.env')}")
+print(f"[DEBUG] OPENAI_API_KEY exists: {api_key is not None}")
+if api_key:
+    print(f"[DEBUG] API key starts with: {api_key[:10]}...")
+# === DEBUG END ===
 
 
 
@@ -66,6 +85,7 @@ def survey_view(request, survey_id):
     return render(request, 'survey_taker/survey.html', context)
 
 
+
 @csrf_exempt
 def process_response(request, survey_id):
     """
@@ -84,41 +104,102 @@ def process_response(request, survey_id):
     Returns:
     {
         "message": "AI's next question or response",
-        "status": "success"
+        "status": "success",
+        "processing_time_ms": 123  # (if DEBUG_TIMING is True)
     }
     """
+    # Start timing
+    start_time = time.time() if DEBUG_TIMING else None
+    
     if request.method != 'POST':
         return JsonResponse({'error': 'Only POST method allowed'}, status=405)
     
     # Get the survey parameters (with caching) - params_dict is already parsed
     survey_params, params_dict = get_survey_params_cached(survey_id)
-    #params_dict = TEST_PARAMS #Overwrite with these params for, well you know, testing
+    params_dict = TEST_PARAMS #Overwrite with these params for, well you know, testing
     try:
+        # === DEBUG START ===
+        print("[DEBUG] Starting process_response")
+        # === DEBUG END ===
+
         # Parse the incoming JSON data
         data = json.loads(request.body)
         user_message = data.get('user_message', '')
         respondent_id = data.get('respondent_id', str(uuid.uuid4()))
+
+        # === DEBUG START ===
+        print(f"[DEBUG] user_message: {user_message}, respondent_id: {respondent_id}")
+        # === DEBUG END ===
+
+        # Initialize or retrieve conversation log from session
+        conversation_log = request.session.get('conversation_log', [])
+
+        # === DEBUG START ===
+        print(f"[DEBUG] conversation_log length: {len(conversation_log)}")
+        # === DEBUG END ===
+
+        # Append user's answer if they provided one
+        if user_message:
+            conversation_log.append({
+                'is_question': 0,
+                'content': user_message
+            })
+            # === DEBUG START ===
+            print(f"[DEBUG] Added user message to log")
+            # === DEBUG END ===
         
-        # TODO: Integrate your LangGraph architecture here
-        # This is where you'll process the user_message and generate the next question
-        # Example:
-        # next_question = your_langgraph_function(
-        #     user_message=user_message,
-        #     params_dict=params_dict,  # Already parsed and cached
-        #     respondent_id=respondent_id
-        # )
+        # === DEBUG START ===
+        print(f"[DEBUG] About to call get_response")
+        print(f"[DEBUG] params_dict keys: {list(params_dict.keys())}")
+        print(f"[DEBUG] api_key exists: {api_key is not None}")
+        # === DEBUG END ===
         
-        #next_question = params_dict.get('prompt', 'This is a placeholder. Integrate your LangGraph logic here.')
-        next_question = params_dict.get('other_params').get('model')
-        return JsonResponse({
+        # Call LangGraph architecture
+        next_question = get_response(params_dict, conversation_log, api_key)
+        
+        # === DEBUG START ===
+        print(f"[DEBUG] get_response returned: {next_question[:50] if isinstance(next_question, str) else next_question}...")
+        # === DEBUG END ===
+        
+        # Append AI's question to conversation log
+        conversation_log.append({
+            'is_question': 1,
+            'content': next_question
+        })
+        
+        # Save updated conversation log to session
+        request.session['conversation_log'] = conversation_log
+
+        # === DEBUG START ===
+        print(f"[DEBUG] Conversation log updated, length: {len(conversation_log)}")
+        # === DEBUG END ===
+        
+        # Calculate processing time
+        response_data = {
             'message': next_question,
             'status': 'success',
             'respondent_id': respondent_id
-        })
+        }
         
-    except json.JSONDecodeError:
+        if DEBUG_TIMING:
+            processing_time_ms = round((time.time() - start_time) * 1000, 2)
+            response_data['processing_time_ms'] = processing_time_ms
+            print(f"[DEBUG] Request processed in {processing_time_ms}ms")
+        
+        return JsonResponse(response_data)
+        
+    except json.JSONDecodeError as e:
+        # === DEBUG START ===
+        print(f"[DEBUG ERROR] JSON decode error: {e}")
+        # === DEBUG END ===
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
+        # === DEBUG START ===
+        print(f"[DEBUG ERROR] Exception in process_response: {str(e)}")
+        print(f"[DEBUG ERROR] Exception type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        # === DEBUG END ===
         return JsonResponse({'error': str(e)}, status=500)
 
 
