@@ -152,16 +152,20 @@ def process_response(request, survey_id):
         print(f"[DEBUG] About to call get_response")
         print(f"[DEBUG] params_dict keys: {list(params_dict.keys())}")
         print(f"[DEBUG] api_key exists: {api_key is not None}")
+        t_before_get_response = time.time()
         # === DEBUG END ===
         
         # Call LangGraph architecture
         next_question = get_response(params_dict, conversation_log, api_key)
         
         # === DEBUG START ===
+        t_after_get_response = time.time()
+        print(f"[TIMING] get_response total: {(t_after_get_response - t_before_get_response) * 1000:.2f}ms")
         print(f"[DEBUG] get_response returned: {next_question[:50] if isinstance(next_question, str) else next_question}...")
         # === DEBUG END ===
         
         # Append AI's question to conversation log
+        t_before_session = time.time()
         conversation_log.append({
             'is_question': 1,
             'content': next_question
@@ -169,12 +173,15 @@ def process_response(request, survey_id):
         
         # Save updated conversation log to session
         request.session['conversation_log'] = conversation_log
+        t_after_session = time.time()
 
         # === DEBUG START ===
+        print(f"[TIMING] Session save: {(t_after_session - t_before_session) * 1000:.2f}ms")
         print(f"[DEBUG] Conversation log updated, length: {len(conversation_log)}")
         # === DEBUG END ===
         
         # Calculate processing time
+        t_before_json = time.time()
         response_data = {
             'message': next_question,
             'status': 'success',
