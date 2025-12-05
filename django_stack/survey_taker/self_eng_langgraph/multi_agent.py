@@ -1,6 +1,90 @@
 # Global model cache to avoid reinitializing on every request
 _model_cache = {}
 
+def warm_openai_cache(params, topic_index, conversation_log, key):
+    """Warm OpenAI's prompt cache for a specific topic by sending a minimal request.
+    This populates the cache with system prompt + conversation history without generating a full response.
+    """
+    from langchain.chat_models import init_chat_model
+    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+    
+    # Cache key based on model config
+    cache_key = (
+        params["prompter_llm"]["model"],
+        params["prompter_llm"]["model_provider"],
+        tuple(sorted(params["prompter_llm"]["kwargs"].items()))
+    )
+    
+    # Get or create model
+    if cache_key in _model_cache:
+        prompt_llm = _model_cache[cache_key]
+    else:
+        model_kwargs = {**params["prompter_llm"]["kwargs"], "api_key": key}
+        prompt_llm = init_chat_model(
+            model=params["prompter_llm"]["model"],
+            model_provider=params["prompter_llm"]["model_provider"],
+            **model_kwargs
+        )
+        _model_cache[cache_key] = prompt_llm
+    
+    # Build messages with the target topic's system prompt
+    system_prompt = params["prompter_llm"]["prompt"].format(
+        current_topic=params["interview_plan"][topic_index]["topic"]
+    )
+    
+    messages = [SystemMessage(content=system_prompt)]
+    messages.extend(
+        AIMessage(content=entry['content']) if entry.get('is_question') in ('1', 1, True)
+        else HumanMessage(content=entry['content'])
+        for entry in conversation_log
+    )
+    
+    # Send minimal request to warm cache (only generate 1 token)
+    try:
+        prompt_llm.invoke(messages, max_tokens=1)
+        print(f"[DEBUG] Warmed OpenAI cache for topic {topic_index}")
+    except Exception as e:
+        print(f"[DEBUG] Cache warming failed (non-critical): {e}")
+
+def get_transition_question(params, next_topic_index, conversation_log, key):
+    """Generate a transition question when moving to a new topic."""
+    import time
+    from langchain.chat_models import init_chat_model
+    from langchain_core.messages import SystemMessage
+    
+    # Get previous and next topic names
+    previous_topic = params["interview_plan"][next_topic_index - 1]["topic"] if next_topic_index > 0 else "introduction"
+    next_topic = params["interview_plan"][next_topic_index]["topic"]
+    
+    # Format transition prompt
+    transition_prompt = params["transition_llm"]["prompt"].format(
+        previous_topic=previous_topic,
+        next_topic=next_topic
+    )
+    
+    # Cache key for transition model
+    cache_key = (
+        params["transition_llm"]["model"],
+        params["transition_llm"]["model_provider"],
+        tuple(sorted(params["transition_llm"]["kwargs"].items()))
+    )
+    
+    # Check cache or create model
+    if cache_key in _model_cache:
+        transition_llm = _model_cache[cache_key]
+    else:
+        model_kwargs = {**params["transition_llm"]["kwargs"], "api_key": key}
+        transition_llm = init_chat_model(
+            model=params["transition_llm"]["model"],
+            model_provider=params["transition_llm"]["model_provider"],
+            **model_kwargs
+        )
+        _model_cache[cache_key] = transition_llm
+    
+    # Generate transition
+    response = transition_llm.invoke([SystemMessage(content=transition_prompt)])
+    return response.content
+
 def test_create_agent(params, key):
     from langchain_openai import ChatOpenAI
     from langgraph.checkpoint.memory import InMemorySaver

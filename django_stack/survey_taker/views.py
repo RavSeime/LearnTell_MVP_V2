@@ -10,7 +10,7 @@ import time
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from .testing_params import TEST_PARAMS
+from .testing_params import TEST_PARAMS, TEST_PARAMS_VERBOSE
 from .self_eng_langgraph.multi_agent import get_response, test_create_agent
 
 # Toggle debug timing
@@ -116,7 +116,7 @@ def process_response(request, survey_id):
     
     # Get the survey parameters (with caching) - params_dict is already parsed
     survey_params, params_dict = get_survey_params_cached(survey_id)
-    params_dict = TEST_PARAMS #Overwrite with these params for, well you know, testing
+    params_dict = TEST_PARAMS_VERBOSE #Overwrite with these params for, well you know, testing
     try:
         # === DEBUG START ===
         print("[DEBUG] Starting process_response")
@@ -140,13 +140,17 @@ def process_response(request, survey_id):
 
         # === DEBUG START ===
         print(f"[DEBUG] conversation_log length: {len(conversation_log)}")
+        print(f"current_topic_index Pre Stack {current_topic_index}")
+        print(f"nr_questions_asked_current_topic Pre Stack {nr_questions_asked_current_topic}")
         # === DEBUG END ===
 
         # Append user's answer if they provided one
         if user_message:
             conversation_log.append({
+                'order': len(conversation_log),
                 'is_question': 0,
-                'content': user_message
+                'content': user_message,
+                'topic': current_topic_index
             })
             # === DEBUG START ===
             print(f"[DEBUG] Added user message to log")
@@ -159,8 +163,62 @@ def process_response(request, survey_id):
         t_before_get_response = time.time()
         # === DEBUG END ===
         
-        # Call LangGraph architecture
-        next_question = get_response(params_dict, current_topic_index,  conversation_log, api_key)
+        # Check if this is the first question (conversation_log is empty or only has 1 item - the user's first message)
+        if len(conversation_log) <= 1 and 'first_question' in params_dict:
+            # Return pre-set first question immediately
+            next_question = params_dict['first_question']
+            
+            # Warm OpenAI cache in background for first topic
+            try:
+                import threading
+                def warm_cache():
+                    from .self_eng_langgraph.multi_agent import warm_openai_cache
+                    # Warm cache with empty conversation (just system prompt)
+                    warm_openai_cache(params_dict, current_topic_index, [], api_key)
+                
+                # Start cache warming in background (non-blocking)
+                warm_thread = threading.Thread(target=warm_cache, daemon=True)
+                warm_thread.start()
+                print(f"[DEBUG] Warming OpenAI cache for first topic in background")
+            except Exception as e:
+                print(f"[DEBUG] Cache warming failed (non-critical): {e}")
+        
+        # Check if all topics are done and we should show closing questions
+        elif current_topic_index >= len(params_dict.get("interview_plan", [])) and 'closing_questions' in params_dict:
+            closing_question_index = request.session.get('closing_question_index', 0)
+            
+            if closing_question_index < len(params_dict['closing_questions']):
+                next_question = params_dict['closing_questions'][closing_question_index]
+                print(f"[DEBUG] Closing question {closing_question_index + 1}/{len(params_dict['closing_questions'])}")
+            else:
+                next_question = params_dict["end_of_interview_message"]
+                print(f"[DEBUG] All closing questions complete")
+        
+        # Check if we have a pre-generated transition question (first question of new topic)
+        elif nr_questions_asked_current_topic == 0 and current_topic_index > 0 and current_topic_index < len(params_dict["interview_plan"]):
+            print(f"[DEBUG] Transition elif triggered")
+            # Try session first, then cache as fallback
+            next_question = request.session.get('pre_generated_transition', None)
+            
+            if not next_question:
+                # Check cache (background thread may have stored it here)
+                next_question = cache.get(f'transition_{respondent_id}_{current_topic_index}')
+                if next_question:
+                    print(f"[DEBUG] Using pre-generated transition from cache (0ms latency)")
+                    cache.delete(f'transition_{respondent_id}_{current_topic_index}')
+                else:
+                    # Fallback: generate transition now (will add latency)
+                    print(f"[DEBUG] No pre-generated transition found, generating now (fallback)")
+                    from .self_eng_langgraph.multi_agent import get_transition_question
+                    next_question = get_transition_question(params_dict, current_topic_index, conversation_log, api_key)
+            else:
+                print(f"[DEBUG] Using pre-generated transition from session (0ms latency)")
+                # Clear the pre-generated transition
+                request.session.pop('pre_generated_transition', None)
+        
+        else:
+            # Call LangGraph architecture for subsequent questions
+            next_question = get_response(params_dict, current_topic_index,  conversation_log, api_key)
         
         # === DEBUG START ===
         t_after_get_response = time.time()
@@ -171,26 +229,63 @@ def process_response(request, survey_id):
         # Append AI's question to conversation log
         t_before_session = time.time()
         conversation_log.append({
+            'order': len(conversation_log),
             'is_question': 1,
-            'content': next_question
+            'content': next_question,
+            'topic': current_topic_index,
         })
         
         # Save updated conversation log to session
         request.session['conversation_log'] = conversation_log
         
-        # Incrementing nr of questions asked in current topic
-        nr_questions_asked_current_topic += 1
-        
-        # Check if we need to move to next topic
-        if current_topic_index < len(params_dict["interview_plan"]):
+        # Track progress based on where we are
+        if current_topic_index >= len(params_dict.get("interview_plan", [])):
+            # In closing questions phase
+            closing_question_index = request.session.get('closing_question_index', 0)
+            request.session['closing_question_index'] = closing_question_index + 1
+        elif current_topic_index < len(params_dict["interview_plan"]):
+            # Normal topic progression
+            nr_questions_asked_current_topic += 1
+            
             topic_length = params_dict["interview_plan"][current_topic_index]["length"]
+            
+            # Pre-generate transition and warm cache if this is the last question of current topic
+            if nr_questions_asked_current_topic == topic_length and current_topic_index + 1 < len(params_dict["interview_plan"]) and params_dict["pre_gen_transitions"]:
+                # Generate transition and warm cache for next topic in background
+                next_topic_idx = current_topic_index + 1  # Capture value before thread
+                try:
+                    import threading
+                    def pregenerate_and_warm():
+                        from .self_eng_langgraph.multi_agent import get_transition_question, warm_openai_cache
+                        # Generate transition question
+                        transition = get_transition_question(params_dict, next_topic_idx, conversation_log, api_key)
+                        # Store in cache instead of session (thread-safe)
+                        cache.set(f'transition_{respondent_id}_{next_topic_idx}', transition, timeout=300)
+                        print(f"[DEBUG] Pre-generated transition stored with key: transition_{respondent_id}_{next_topic_idx}")
+                        # Warm OpenAI cache for next topic
+                        warm_openai_cache(params_dict, next_topic_idx, conversation_log, api_key)
+                    
+                    thread = threading.Thread(target=pregenerate_and_warm, daemon=True)
+                    thread.start()
+                except Exception as e:
+                    print(f"[DEBUG] Transition pre-generation/warming failed (non-critical): {e}")
+            
             if nr_questions_asked_current_topic >= topic_length:
                 current_topic_index += 1
                 nr_questions_asked_current_topic = 0
-        
-        # Save topic tracking to session
-        request.session['current_topic_index'] = current_topic_index
-        request.session['nr_questions_asked_current_topic'] = nr_questions_asked_current_topic
+                
+                # Check for pre-generated transition in cache
+                transition = cache.get(f'transition_{respondent_id}_{current_topic_index}')
+                if transition:
+                    request.session['pre_generated_transition'] = transition
+                    cache.delete(f'transition_{respondent_id}_{current_topic_index}')
+            
+            print(f"[DEBUG]current_topic_index Post Stack {current_topic_index}")
+            print(f"[DEBUG] nr_questions_asked_current_topic Post Stack {nr_questions_asked_current_topic}")
+            
+            # Save topic tracking to session
+            request.session['current_topic_index'] = current_topic_index
+            request.session['nr_questions_asked_current_topic'] = nr_questions_asked_current_topic
         
         t_after_session = time.time()
 
