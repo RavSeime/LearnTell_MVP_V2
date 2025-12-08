@@ -1,17 +1,39 @@
 {% extends "home/layout.html" %}
 {% block body %}
-    <h1>Edit Survey</h1>
-    
-    <form method="post">
-        {% csrf_token %}
+    <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div style="flex: 1;">
+            <h1>Edit Survey</h1>
+            
+            {% if error %}
+                <div class="error-message" style="color: #ff4444; background: rgba(255, 68, 68, 0.1); padding: 10px; margin-bottom: 20px; border: 1px solid #ff4444;">
+                    {{ error }}
+                </div>
+            {% endif %}
+            
+            <form method="post">
+                {% csrf_token %}
+                
+                <label for="survey_name">Survey Name:</label><br>
+                <input type="text" name="survey_name" value="{{ survey.survey_name }}" required><br><br>
+                
+                <label for="params">Parameters (JSON):</label><br>
+                <textarea name="params" rows="15" cols="80" required>{{ params_pretty }}</textarea><br><br>
+                
+                <button type="submit">Save Changes</button>
+                <a href="{% url 'index' %}"><button type="button">Cancel</button></a>
+            </form>
+        </div>
         
-        <label for="survey_name">Survey Name:</label><br>
-        <input type="text" name="survey_name" value="{{ survey.survey_name }}" required><br><br>
-        
-        <label for="params">Parameters (JSON):</label><br>
-        <textarea name="params" rows="15" cols="80" required>{{ params_pretty }}</textarea><br><br>
-        
-        <button type="submit">Save Changes</button>
-        <a href="{% url 'index' %}"><button type="button">Cancel</button></a>
-    </form>
+        <div style="margin-left: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; min-width: 200px;">
+            <h3>Survey Responses</h3>
+            <p><strong>Total Responses:</strong> {{ response_count }}</p>
+            {% if response_count > 0 %}
+                <a href="{% url 'download_responses' survey.survey_id %}">
+                    <button type="button" style="width: 100%; padding: 10px;">📥 Download CSV</button>
+                </a>
+            {% else %}
+                <p style="color: #999; font-style: italic;">No responses yet</p>
+            {% endif %}
+        </div>
+    </div>
 {% endblock %}

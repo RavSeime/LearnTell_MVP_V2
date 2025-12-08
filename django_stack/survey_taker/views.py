@@ -116,7 +116,7 @@ def process_response(request, survey_id):
     
     # Get the survey parameters (with caching) - params_dict is already parsed
     survey_params, params_dict = get_survey_params_cached(survey_id)
-    params_dict = TEST_PARAMS_VERBOSE #Overwrite with these params for, well you know, testing
+    #params_dict = TEST_PARAMS_VERBOSE #Overwrite with these params for, well you know, testing
     try:
         # === DEBUG START ===
         print("[DEBUG] Starting process_response")

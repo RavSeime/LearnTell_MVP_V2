@@ -1,14 +1,212 @@
-/* Styling for new_years.html */
-body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
+/* Cyberpunk Black & Neon Green Theme */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap');
+
+* {
     margin: 0;
-    font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-h1, h2 {
-    text-align: center;
-    font-family: 'Comic Sans MS', 'Comic Sans', cursive;
+body {
+    background: #0a0a0a;
+    color: #e0e0e0;
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    position: relative;
+    background-image: 
+        linear-gradient(0deg, transparent 24%, rgba(185, 242, 42, .05) 25%, rgba(185, 242, 42, .05) 26%, transparent 27%, transparent 74%, rgba(185, 242, 42, .05) 75%, rgba(185, 242, 42, .05) 76%, transparent 77%, transparent),
+        linear-gradient(90deg, transparent 24%, rgba(185, 242, 42, .05) 25%, rgba(185, 242, 42, .05) 26%, transparent 27%, transparent 74%, rgba(185, 242, 42, .05) 75%, rgba(185, 242, 42, .05) 76%, transparent 77%, transparent);
+    background-size: 50px 50px;
+}
+
+/* Prototype Badge */
+body::before {
+    content: 'IntervjuBot Prototype V1';
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #b9f22a;
+    text-shadow: 0 0 10px #b9f22a, 0 0 20px #b9f22a;
+    padding: 8px 16px;
+    border: 2px solid #b9f22a;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 9999;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Header Styles */
+h1, h2, h3 {
+    font-family: 'Orbitron', monospace;
+    color: #b9f22a;
+    text-shadow: 0 0 10px #b9f22a;
+    margin-bottom: 20px;
+}
+
+h1 { font-size: 2.5em; font-weight: 900; }
+h2 { font-size: 2em; font-weight: 700; }
+h3 { font-size: 1.5em; font-weight: 700; }
+
+/* User Info */
+p {
+    color: #e0e0e0;
+    margin-bottom: 10px;
+}
+
+/* Links */
+a {
+    color: #b9f22a;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    text-shadow: 0 0 5px #b9f22a;
+}
+
+a:hover {
+    color: #fff;
+    text-shadow: 0 0 15px #b9f22a, 0 0 25px #b9f22a;
+}
+
+/* Links wrapping buttons should not have text effects */
+a:has(button) {
+    text-shadow: none;
+    font-weight: normal;
+}
+
+a:has(button):hover {
+    text-shadow: none;
+}
+
+/* Forms */
+form {
+    background: rgba(20, 20, 20, 0.9);
+    padding: 30px;
+    border: 2px solid #b9f22a;
+    box-shadow: 0 0 20px rgba(185, 242, 42, 0.3);
+    max-width: 500px;
+    margin: 50px auto;
+}
+
+label {
+    display: block;
+    color: #b9f22a;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.9em;
+}
+
+input[type="text"],
+input[type="password"],
+textarea {
+    width: 100%;
+    padding: 12px;
+    background: #000;
+    border: 1px solid #b9f22a;
+    color: #b9f22a;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+textarea:focus {
+    outline: none;
+    border-color: #fff;
+    box-shadow: 0 0 15px rgba(185, 242, 42, 0.5);
+}
+
+textarea {
+    resize: vertical;
+    font-family: 'Courier New', monospace;
+}
+
+/* Buttons */
+button,
+input[type="submit"] {
+    background: #000;
+    color: #b9f22a;
+    border: 2px solid #b9f22a;
+    padding: 12px 30px;
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-right: 10px;
+}
+
+button:hover,
+input[type="submit"]:hover {
+    background: #b9f22a;
+    color: #000;
+    box-shadow: 0 0 20px rgba(185, 242, 42, 0.8);
+}
+
+button[type="button"] {
+    background: transparent;
+    border-color: #808080;
+    color: #808080;
+}
+
+button[type="button"]:hover {
+    border-color: #b9f22a;
+    color: #b9f22a;
+    background: transparent;
+}
+
+/* Messages */
+div[class*="message"],
+.message {
+    background: rgba(185, 242, 42, 0.1);
+    border-left: 4px solid #b9f22a;
+    padding: 15px;
+    margin: 20px auto;
+    max-width: 500px;
+    color: #b9f22a;
+    font-weight: 600;
+}
+
+/* Survey Response Sidebar */
+div[style*="border"] {
+    background: rgba(20, 20, 20, 0.9) !important;
+    border: 2px solid #b9f22a !important;
+    box-shadow: 0 0 20px rgba(185, 242, 42, 0.3) !important;
+}
+
+/* Navigation/Top Banner */
+.top-banner {
+    background: rgba(0, 0, 0, 0.9);
+    padding: 15px;
+    border-bottom: 2px solid #b9f22a;
+    margin-bottom: 30px;
+}
+
+.top-banner a {
+    margin-right: 20px;
+}
+
+/* Container for centered content */
+body > p,
+body > a {
+    padding: 10px 20px;
+}
+
+/* Edit Survey Layout */
+div[style*="display: flex"] {
+    padding: 20px;
 }

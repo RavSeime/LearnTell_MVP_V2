@@ -1,7 +1,11 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IntervjuBot</title>
+    <link rel="stylesheet" href="{% static 'home/styles.css' %}?v=20251208">
 </head>
 <body>
     {% if user.is_authenticated %}
@@ -12,8 +16,7 @@
      <a href="{% url 'login' %}">Login</a>
     {% endif %}
     <div class="top-banner">
-        <a href="{% url 'to_do_list:index' %}">Home</a> 
-        <a href="{% url 'to_do_list:add' %}">Add Task</a>
+        <a href="{% url 'index' %}">Home</a>
     </div>
     
     {% block body %}
