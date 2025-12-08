@@ -13,6 +13,9 @@
             <form method="post">
                 {% csrf_token %}
                 
+                <label>Survey ID:</label><br>
+                <p style="color: #b9f22a; font-family: 'Courier New', monospace; margin-bottom: 20px;">{{ survey.survey_id }}</p>
+                
                 <label for="survey_name">Survey Name:</label><br>
                 <input type="text" name="survey_name" value="{{ survey.survey_name }}" required><br><br>
                 
