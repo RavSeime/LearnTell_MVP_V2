@@ -1,6 +1,7 @@
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, reverse, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
+from django.core.cache import cache
 from .models import SurveyParams, SurveyResponse
 import csv
 import json
@@ -67,6 +68,10 @@ def edit_survey(request, survey_id):
                 "error": f"Invalid JSON: {str(e)}"
             })
         survey.save()
+        
+        # Invalidate cache so survey_taker gets fresh params immediately
+        cache.delete(f'survey_params_{survey_id}')
+        
         return HttpResponseRedirect(reverse("index"))
     
     # Pretty-print the JSON for display
