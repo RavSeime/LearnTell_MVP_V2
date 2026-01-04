@@ -44,7 +44,7 @@ def get_survey_params_cached(survey_id):
         survey_params = get_object_or_404(SurveyParams, survey_id=survey_id)
         # Parse params once and cache the result
         params_dict = ast.literal_eval(survey_params.params) if isinstance(survey_params.params, str) else survey_params.params
-        cached_data = (survey_params, params_dict)
+        cached_data = (survey_params, params_dict) # TODO(ravse): Refactor cache to store only survey_params, parse params on demand
         cache.set(cache_key, cached_data, timeout=3600)  # Cache for 1 hour
     
     return cached_data
@@ -215,6 +215,10 @@ def process_response(request, survey_id):
                 print(f"[DEBUG] Using pre-generated transition from session (0ms latency)")
                 # Clear the pre-generated transition
                 request.session.pop('pre_generated_transition', None)
+            
+            # HACK: Override with raw topic text
+            next_question = params_dict["interview_plan"][current_topic_index]["topic"]
+            print(f"[DEBUG HACK] Overriding transition with raw topic text")
         
         else:
             # Call LangGraph architecture for subsequent questions
