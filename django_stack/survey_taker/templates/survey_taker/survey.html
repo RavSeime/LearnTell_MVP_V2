@@ -237,8 +237,10 @@
                 submitButton.innerText = "Survey completed";
                 submitButton.style.backgroundColor = '#ccc';
                 
-                // Enable the Survey.js Complete button
-                window.survey.doComplete();
+                // Enable the Survey.js Complete button after 2 second delay
+                setTimeout(() => {
+                  window.survey.doComplete();
+                }, 2000);
               } else {
                 submitButton.disabled = false;
                 submitButton.innerText = "Submit answer";
