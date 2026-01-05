@@ -31,6 +31,10 @@ if api_key:
 # === DEBUG END ===
 
 
+def get_session_key(survey_id, key_name):
+    """Generate a namespaced session key for survey-specific data."""
+    return f'survey_{survey_id}_{key_name}'
+
 
 def get_survey_params_cached(survey_id):
     """
@@ -132,11 +136,11 @@ def process_response(request, survey_id):
         # === DEBUG END ===
 
         # Initialize or retrieve conversation log from session
-        conversation_log = request.session.get('conversation_log', [])
+        conversation_log = request.session.get(get_session_key(survey_id, 'conversation_log'), [])
 
         #Initialize or retrive index of current topic
-        current_topic_index = request.session.get("current_topic_index", 0)
-        nr_questions_asked_current_topic = request.session.get("nr_questions_asked_current_topic", 0)
+        current_topic_index = request.session.get(get_session_key(survey_id, 'current_topic_index'), 0)
+        nr_questions_asked_current_topic = request.session.get(get_session_key(survey_id, 'nr_questions_asked_current_topic'), 0)
 
         # === DEBUG START ===
         print(f"[DEBUG] conversation_log length: {len(conversation_log)}")
@@ -185,7 +189,7 @@ def process_response(request, survey_id):
         
         # Check if all topics are done and we should show closing questions
         elif current_topic_index >= len(params_dict.get("interview_plan", [])) and 'closing_questions' in params_dict:
-            closing_question_index = request.session.get('closing_question_index', 0)
+            closing_question_index = request.session.get(get_session_key(survey_id, 'closing_question_index'), 0)
             
             if closing_question_index < len(params_dict['closing_questions']):
                 next_question = params_dict['closing_questions'][closing_question_index]
@@ -198,7 +202,7 @@ def process_response(request, survey_id):
         elif nr_questions_asked_current_topic == 0 and current_topic_index > 0 and current_topic_index < len(params_dict["interview_plan"]):
             print(f"[DEBUG] Transition elif triggered")
             # Try session first, then cache as fallback
-            next_question = request.session.get('pre_generated_transition', None)
+            next_question = request.session.get(get_session_key(survey_id, 'pre_generated_transition'), None)
             
             if not next_question:
                 # Check cache (background thread may have stored it here)
@@ -214,7 +218,7 @@ def process_response(request, survey_id):
             else:
                 print(f"[DEBUG] Using pre-generated transition from session (0ms latency)")
                 # Clear the pre-generated transition
-                request.session.pop('pre_generated_transition', None)
+                request.session.pop(get_session_key(survey_id, 'pre_generated_transition'), None)
             
             # HACK: Override with raw topic text
             next_question = params_dict["interview_plan"][current_topic_index]["topic"]
@@ -240,13 +244,13 @@ def process_response(request, survey_id):
         })
         
         # Save updated conversation log to session
-        request.session['conversation_log'] = conversation_log
+        request.session[get_session_key(survey_id, 'conversation_log')] = conversation_log
         
         # Track progress based on where we are
         if current_topic_index >= len(params_dict.get("interview_plan", [])):
             # In closing questions phase
-            closing_question_index = request.session.get('closing_question_index', 0)
-            request.session['closing_question_index'] = closing_question_index + 1
+            closing_question_index = request.session.get(get_session_key(survey_id, 'closing_question_index'), 0)
+            request.session[get_session_key(survey_id, 'closing_question_index')] = closing_question_index + 1
         elif current_topic_index < len(params_dict["interview_plan"]):
             # Normal topic progression
             nr_questions_asked_current_topic += 1
@@ -281,15 +285,15 @@ def process_response(request, survey_id):
                 # Check for pre-generated transition in cache
                 transition = cache.get(f'transition_{respondent_id}_{current_topic_index}')
                 if transition:
-                    request.session['pre_generated_transition'] = transition
+                    request.session[get_session_key(survey_id, 'pre_generated_transition')] = transition
                     cache.delete(f'transition_{respondent_id}_{current_topic_index}')
             
             print(f"[DEBUG]current_topic_index Post Stack {current_topic_index}")
             print(f"[DEBUG] nr_questions_asked_current_topic Post Stack {nr_questions_asked_current_topic}")
             
             # Save topic tracking to session
-            request.session['current_topic_index'] = current_topic_index
-            request.session['nr_questions_asked_current_topic'] = nr_questions_asked_current_topic
+            request.session[get_session_key(survey_id, 'current_topic_index')] = current_topic_index
+            request.session[get_session_key(survey_id, 'nr_questions_asked_current_topic')] = nr_questions_asked_current_topic
         
         t_after_session = time.time()
 
@@ -360,6 +364,12 @@ def complete_survey(request, survey_id):
             respondent_id=respondent_id,
             defaults={'responses': {'conversation': conversation}}
         )
+        
+        # Clear survey-specific session data after successful save
+        for key in ['conversation_log', 'current_topic_index', 'nr_questions_asked_current_topic', 
+                    'closing_question_index', 'pre_generated_transition']:
+            session_key = get_session_key(survey_id, key)
+            request.session.pop(session_key, None)
         
         return JsonResponse({
             'status': 'success',
