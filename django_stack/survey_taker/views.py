@@ -84,7 +84,6 @@ def survey_view(request, survey_id):
     context = {
         'survey_id': str(survey_id),
         'survey_name': survey_params.survey_name,
-        'survey_params': json.dumps(survey_params.params),  # Pass params as JSON string
     }
     return render(request, 'survey_taker/survey.html', context)
 
