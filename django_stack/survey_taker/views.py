@@ -203,6 +203,8 @@ def process_response(request, survey_id):
             # Try session first, then cache as fallback
             next_question = request.session.get(get_session_key(survey_id, 'pre_generated_transition'), None)
             
+            #Commented out transition code for now. HACK
+            """
             if not next_question:
                 # Check cache (background thread may have stored it here)
                 next_question = cache.get(f'transition_{respondent_id}_{current_topic_index}')
@@ -218,6 +220,7 @@ def process_response(request, survey_id):
                 print(f"[DEBUG] Using pre-generated transition from session (0ms latency)")
                 # Clear the pre-generated transition
                 request.session.pop(get_session_key(survey_id, 'pre_generated_transition'), None)
+            """
             
             # HACK: Override with raw topic text
             next_question = params_dict["interview_plan"][current_topic_index]["topic"]
