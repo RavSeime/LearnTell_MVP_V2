@@ -50,7 +50,7 @@ def get_transition_question(params, next_topic_index, conversation_log, key):
     """Generate a transition question when moving to a new topic."""
     import time
     from langchain.chat_models import init_chat_model
-    from langchain_core.messages import SystemMessage
+    from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
     
     # Get previous and next topic names
     previous_topic = params["interview_plan"][next_topic_index - 1]["topic"] if next_topic_index > 0 else "introduction"
@@ -82,7 +82,14 @@ def get_transition_question(params, next_topic_index, conversation_log, key):
         _model_cache[cache_key] = transition_llm
     
     # Generate transition
-    response = transition_llm.invoke([SystemMessage(content=transition_prompt)])
+    messages = [SystemMessage(content=transition_prompt)]
+    messages.extend(
+        AIMessage(content=entry['content']) if entry.get('is_question') in ('1', 1, True)
+        else HumanMessage(content=entry['content'])
+        for entry in conversation_log
+    )
+
+    response = transition_llm.invoke(messages)
     return response.content
 
 def test_create_agent(params, key):
