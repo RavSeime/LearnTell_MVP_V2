@@ -222,11 +222,14 @@ def process_response(request, survey_id):
                 request.session.pop(get_session_key(survey_id, 'pre_generated_transition'), None)
             
             
-            """
-            # HACK: Override with raw topic text
-            next_question = params_dict["interview_plan"][current_topic_index]["topic"]
+            
+            # HACK: Last ductape solution for transitions!
+            topic_hard_coded = params_dict["interview_plan"][current_topic_index]["topic"]
+            next_question += "\n"
+            next_question += "\n"
+            next_question += topic_hard_coded
             print(f"[DEBUG HACK] Overriding transition with raw topic text")
-            """
+            
         
         else:
             # Call LangGraph architecture for subsequent questions
