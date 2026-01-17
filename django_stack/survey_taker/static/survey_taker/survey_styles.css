@@ -142,6 +142,10 @@ input[type="button"][value="Complete"],
     padding-left: 5px !important;
   }
   
+  .submit-button-container > div > div:last-child {
+    font-size: 13px !important;
+  }
+  
   /* Adjust survey container for mobile */
   #surveyContainer {
     padding: 0 !important;
@@ -183,6 +187,10 @@ input[type="button"][value="Complete"],
   
   .submit-button-container > div {
     font-size: 12px !important;
+  }
+  
+  .submit-button-container > div > div:last-child {
+    font-size: 11px !important;
   }
   
   /* Adjust footer to prevent overflow */
@@ -230,5 +238,33 @@ input[type="button"][value="Complete"],
 @media only screen and (max-width: 480px) {
   .sv_completed_page h3, .sd-completedpage h3 {
     font-size: 20px !important;
+  }
+}
+
+/* Sensitive details disclaimer styling */
+#sensitiveDetailsDisclaimer {
+  width: 95% !important;
+  max-width: 800px !important;
+  margin: 20px auto !important;
+  text-align: center !important;
+  font-size: 16px !important;
+  color: #666 !important;
+  font-style: italic !important;
+  padding: 10px 20px !important;
+}
+
+@media only screen and (max-width: 768px) {
+  #sensitiveDetailsDisclaimer {
+    font-size: 14px !important;
+    padding: 8px 15px !important;
+    margin: 15px auto !important;
+  }
+}
+
+@media only screen and (max-width: 480px) {
+  #sensitiveDetailsDisclaimer {
+    font-size: 13px !important;
+    padding: 8px 10px !important;
+    margin: 10px auto !important;
   }
 }
