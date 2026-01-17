@@ -30,8 +30,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-fallback-key-change-t
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = ['intervjubot-django.onrender.com', 'localhost', '127.0.0.1']
-
+ALLOWED_HOSTS = ['intervjubot-django.onrender.com', 'mvp1-1-optz.onrender.com', 'localhost', '127.0.0.1', 'learntell.app']
 
 # Application definition
 
