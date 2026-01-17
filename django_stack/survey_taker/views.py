@@ -224,7 +224,7 @@ def process_response(request, survey_id):
             
             
             # HACK: Last ductape solution for transitions!
-            topic_hard_coded = params_dict["interview_plan"][current_topic_index]["topic"]
+            topic_hard_coded = params_dict["interview_plan"][current_topic_index]["initial_question"]
             next_question += "\n"
             next_question += "\n"
             next_question += topic_hard_coded
