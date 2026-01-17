@@ -312,10 +312,18 @@ def process_response(request, survey_id):
         
         # Calculate processing time
         t_before_json = time.time()
+        
+        # #HACK FOR INTERVIEW BAR - Calculate total questions for frontend progress
+        interview_plan = params_dict.get("interview_plan", [])
+        closing_questions = params_dict.get("closing_questions", [])
+        total_questions = sum(topic.get("length", 0) for topic in interview_plan) + len(closing_questions)
+        # #HACK FOR INTERVIEW BAR END
+        
         response_data = {
             'message': next_question,
             'status': 'success',
-            'respondent_id': respondent_id
+            'respondent_id': respondent_id,
+            'total_questions': total_questions  # #HACK FOR INTERVIEW BAR
         }
         
         if DEBUG_TIMING:
