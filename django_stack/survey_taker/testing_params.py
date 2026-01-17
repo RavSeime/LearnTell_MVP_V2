@@ -57,6 +57,39 @@ TEST_PARAMS = {
             "temperature": 0.7,
             "max_tokens": 200
         }
+    },
+    "engagement_llm": {
+        "prompt": """
+        CONTEXT: You're an AI proficient in conducting qualitative interviews for academic research. You're analyzing the engagement level of an interviewee during a qualitative interview about their reasons for not investing in the stock market.
+
+        Current topic: {current_topic}
+
+        TASK: Assess whether the interviewee's engagement is LOW based on the conversation history. Engagement is considered LOW if:
+        1. Responses are consistently very brief (one-word answers, minimal elaboration)
+        2. Responses show signs of disinterest, fatigue, or resistance
+        3. The interviewee is not providing substantive information despite multiple probing questions
+        4. Responses are repetitive without adding new insights
+        5. The conversation has reached a point where further questions on this topic are unlikely to yield valuable information
+
+        Engagement is considered GOOD (not low) if:
+        1. The interviewee is providing detailed, thoughtful responses
+        2. The conversation is flowing naturally with meaningful exchanges
+        3. The interviewee is actively engaging with the questions
+        4. New insights or perspectives are still emerging
+
+        IMPORTANT: You must respond with a JSON object containing only a boolean field "low_engagement". 
+        - Set "low_engagement" to true if engagement is LOW and you should move to the next topic
+        - Set "low_engagement" to false if engagement is GOOD and you should continue the current topic
+
+        Your response must be valid JSON with the structure: {{"low_engagement": true}} or {{"low_engagement": false}}
+        """,
+        "model": "gpt-4o-mini",
+        "model_provider": "openai",
+        "kwargs": {
+            "temperature": 0.3,
+            "max_tokens": 50
+        },
+        "min_questions_before_check": 1
     }, 
     "interview_plan": [
 			{
@@ -132,6 +165,39 @@ TEST_PARAMS_VERBOSE = {
             "temperature": 0.7,
             "max_tokens": 200
         }
+    },
+    "engagement_llm": {
+        "prompt": """
+        KONTEKST: Du er en AI som er dyktig på å gjennomføre kvalitative intervjuer for forskning. Du analyserer engasjementsnivået til en intervjuperson under et kvalitativt intervju om deres syn på kvaliteten på Baker Bruns produkter.
+
+        Nåværende tema: {current_topic}
+
+        OPPGAVE: Vurder om intervjupersonens engasjement er LAV basert på samtalehistorikken. Engasjement anses som LAV hvis:
+        1. Svarene er konsekvent veldig korte (enkeltsvar, minimal utdyping)
+        2. Svarene viser tegn på mangel på interesse, tretthet eller motstand
+        3. Intervjupersonen gir ikke substansielle opplysninger til tross for flere utforskende spørsmål
+        4. Svarene er repeterende uten å legge til nye innsikter
+        5. Samtalen har nådd et punkt der videre spørsmål om dette temaet sannsynligvis ikke vil gi verdifull informasjon
+
+        Engasjement anses som GODT (ikke lavt) hvis:
+        1. Intervjupersonen gir detaljerte, gjennomtenkte svar
+        2. Samtalen flyter naturlig med meningsfulle utvekslinger
+        3. Intervjupersonen engasjerer seg aktivt med spørsmålene
+        4. Nye innsikter eller perspektiver fortsatt dukker opp
+
+        VIKTIG: Du må svare med et JSON-objekt som kun inneholder et boolsk felt "low_engagement".
+        - Sett "low_engagement" til true hvis engasjementet er LAVT og du bør gå videre til neste tema
+        - Sett "low_engagement" til false hvis engasjementet er GODT og du bør fortsette med nåværende tema
+
+        Ditt svar må være gyldig JSON med strukturen: {{"low_engagement": true}} eller {{"low_engagement": false}}
+        """,
+        "model": "gpt-4o-mini",
+        "model_provider": "openai",
+        "kwargs": {
+            "temperature": 0.3,
+            "max_tokens": 50
+        },
+        "min_questions_before_check": 1
     }, 
     "interview_plan": [
 			{
@@ -158,4 +224,79 @@ TEST_PARAMS_VERBOSE = {
 			"topic": "Avrunding — siste presisering og oppfølging. Dekning: fang opp misforståelser eller utestående punkter; få samtykke til eventuell oppfølging. Start f.eks. med: Er det noe viktig vi har oversett eller misforstått? Se an samtalen; la deg f.eks. inspirere av disse mulige spørsmålene: 1) Er det greit at vi kontakter deg hvis vi tester ett av forslagene dine? 2) Er det noe du vil legge til før vi runder av?",
 			"length": 1
 			}]
+}
+
+TEST_PARAMS_BERGEN_IMPRO = {
+    "prompter_llm": {
+        "model": "gpt-4o",
+        "kwargs": {
+            "max_tokens": 10000,
+            "temperature": 0.5
+        },
+        "prompt": "Du er en intervjuer som skal holde et kundeintervju på vegne av Bergen Improteater som skal holde et kurs i impro. Improkurset har enda ikke startet, og dette intervjuet er et diagnostisk kundeintervju som gjennomføres med kursdeltakeren FØR kurset starter. Formålet med intervjuet er å kartlegge kursdeltakerens motivasjon med å ta kurest. Jobben din er å grave ut verdifull informasjon fra kursdeltakeren, men ikke grav unaturlig dypt eller still gravende spørsmål hvor det ikke er behov for det. Temaet nå er {current_topic}. IKKE avslutt samtalen før intervjuet har gått gjennom ALLE temaene (topics). Merk at hvis brukeren stiller spørsmål som gjelder kurset, be dem sende spørsmålet til kursholderen på e-post.",
+        "model_provider": "openai"
+    },
+    "first_question": "Hei :) La oss egentlig bare gå rett på sak: Hvordan fant du ut om oss? Via Google/søk, Facebook, Instagram? Eller kanskje via en venn eller et arrangement?",
+    "interview_plan": [
+        {
+            "topic": "Finn ut konteksten bak deres funn av oss. Hvis det var via en venn/bekjent, hva var situasjonen og hva var anbefalingen? Hvis det var et event, hvilket event var det og hvordan havnet de der? Hvis google, hva søkte de etter? Hvis sosiale media, kom de over en annonse eller et innlegg, eller noe annet?",
+            "length": 2,
+            "initial_question": "Kan du fortelle litt mer om hvordan du først kom i kontakt med oss? Hva var det som gjorde at du oppdaget Bergen Improteater?"
+        },
+        {
+            "topic": "Hva motiverte deg til å melde deg på kurset vårt? For moro skyld? For personlig utvikling (selvtillitt, sosiale ferdigheter, kommunikasjon, etc.)? Noe annet?",
+            "length": 3,
+            "initial_question": "Hva var det som gjorde at du bestemte deg for å melde deg på dette improkurset? Hva håper du å få ut av det?"
+        },
+        {
+            "topic": "Hvilke ting vurderte du som utfordrende eller litt demotiverende før du bestemte deg for å melde deg på, for eksempel praktiske forhold (som at helgene passer bedre enn ukedager) eller personlige preferanser (som at du blir nervøs i nye grupper)?",
+            "length": 2,
+            "initial_question": "Var det noe som gjorde deg usikker eller som nesten fikk deg til å ikke melde deg på? Noen bekymringer eller utfordringer du tenkte på?"
+        }
+    ],
+    "transition_llm": {
+        "model": "gpt-4o",
+        "kwargs": {
+            "max_tokens": 300,
+            "temperature": 0.5
+        },
+        "prompt": "Du er en AI agent som skal gi en lett bekreftelse av det brukeren nettopp sa kun ved bruk av statements, INGEN SPØRSMÅL. Eksempelvis: (Ja, xyz er utfordrende. Takk for at du delte!) eller (Gøy å høre at xyz!). Du skal være VELDIG konsis, det vil si KUN EN ENESTE SETNING. Merk at du ikke skal gi overdådig validering eller være unaturlig glad. Et eksempel på hva du IKKE skal respondere til (visste at impro fantes fra før av; ville finne ut om det fantes et slikt tilbud i bergen) med, det er: (Google-søk er en flott måte å finne informasjon på! Takk for at du fant oss der.) Dette blir unaturlig bruk av validering. Det er ingen i den virkelige verdenen som skryter av noen for å bruke google søk eller takker dem for å finne dem på google. Du skal heller ikke si banale ting slik som (Facebook er et nyttig verktøy for å oppdage nye ting). Det er bedre å si litt for lite enn litt for mye. Hva man heller kunne sagt er: (Du kjente til impro fra før av ja? Interessant!) OG HUSK: INGEN SPØRSMÅL! BARE STATEMENTS! Du skal heller ikke på NOEN MÅTE FORSØKE Å AVSLUTTE SAMTALEN ELLER IMPLISERE AT SAMTALEN NÅ ELLER STRAKS ER OVER.Så unngå utsagn slik som (lykke til!) eller liknende.",
+        "model_provider": "openai"
+    },
+    "closing_questions": [],
+    "pre_gen_transitions": True,
+    "end_of_interview_message": "Sånn, da var intervjuet over! Takk for tiden og oppmerksomheten din, og sees snart på kurs!  ---END---",
+    "engagement_llm": {
+        "prompt": """
+        KONTEKST: Du er en AI som er dyktig på å gjennomføre kvalitative intervjuer. Du analyserer engasjementsnivået til en kursdeltaker under et diagnostisk kundeintervju for Bergen Improteater som skal holde et kurs i impro.
+
+        Nåværende tema: {current_topic}
+
+        OPPGAVE: Vurder om kursdeltakerens engasjement er LAV basert på samtalehistorikken. Engasjement anses som LAV hvis:
+        1. Svarene er konsekvent veldig korte (enkeltsvar, minimal utdyping)
+        2. Svarene viser tegn på mangel på interesse, tretthet eller motstand
+        3. Kursdeltakeren gir ikke substansielle opplysninger til tross for flere utforskende spørsmål
+        4. Svarene er repeterende uten å legge til nye innsikter
+        5. Samtalen har nådd et punkt der videre spørsmål om dette temaet sannsynligvis ikke vil gi verdifull informasjon
+
+        Engasjement anses som GODT (ikke lavt) hvis:
+        1. Kursdeltakeren gir detaljerte, gjennomtenkte svar
+        2. Samtalen flyter naturlig med meningsfulle utvekslinger
+        3. Kursdeltakeren engasjerer seg aktivt med spørsmålene
+        4. Nye innsikter eller perspektiver fortsatt dukker opp
+
+        VIKTIG: Du må svare med et JSON-objekt som kun inneholder et boolsk felt "low_engagement".
+        - Sett "low_engagement" til true hvis engasjementet er LAVT og du bør gå videre til neste tema
+        - Sett "low_engagement" til false hvis engasjementet er GODT og du bør fortsette med nåværende tema
+
+        Ditt svar må være gyldig JSON med strukturen: {{"low_engagement": true}} eller {{"low_engagement": false}}
+        """,
+        "model": "gpt-4o-mini",
+        "model_provider": "openai",
+        "kwargs": {
+            "temperature": 0.3,
+            "max_tokens": 50
+        },
+        "min_questions_before_check": 1
+    }
 }

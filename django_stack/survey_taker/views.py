@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from .testing_params import TEST_PARAMS, TEST_PARAMS_VERBOSE
-from .self_eng_langgraph.multi_agent import get_response, test_create_agent
+from .self_eng_langgraph.multi_agent import get_response, test_create_agent, check_engagement
 
 # Toggle debug timing
 DEBUG_TIMING = True
@@ -159,6 +159,37 @@ def process_response(request, survey_id):
             print(f"[DEBUG] Added user message to log")
             # === DEBUG END ===
         
+        # Check engagement if configured and conditions are met
+        if (user_message and 
+            'engagement_llm' in params_dict and 
+            current_topic_index < len(params_dict.get("interview_plan", [])) and
+            nr_questions_asked_current_topic > 0):  # Only check after at least one question
+            
+            # Get minimum questions before allowing engagement-based transition
+            min_questions = params_dict.get("engagement_llm", {}).get("min_questions_before_check", 0)
+            
+            if nr_questions_asked_current_topic >= min_questions:
+                try:
+                    t_before_engagement = time.time()
+                    low_engagement = check_engagement(params_dict, current_topic_index, conversation_log, api_key)
+                    t_after_engagement = time.time()
+                    print(f"[TIMING] Engagement check: {(t_after_engagement - t_before_engagement) * 1000:.2f}ms")
+                    print(f"[DEBUG] Engagement check result: low_engagement={low_engagement}")
+                    
+                    if low_engagement:
+                        print(f"[DEBUG] Low engagement detected, moving to next topic")
+                        # Move to next topic
+                        current_topic_index += 1
+                        nr_questions_asked_current_topic = 0
+                        
+                        # Update session immediately
+                        request.session[get_session_key(survey_id, 'current_topic_index')] = current_topic_index
+                        request.session[get_session_key(survey_id, 'nr_questions_asked_current_topic')] = nr_questions_asked_current_topic
+                        
+                except Exception as e:
+                    print(f"[DEBUG] Engagement check failed (non-critical): {e}")
+                    # Continue with normal flow if engagement check fails
+        
         # === DEBUG START ===
         print(f"[DEBUG] About to call get_response")
         print(f"[DEBUG] params_dict keys: {list(params_dict.keys())}")
@@ -227,6 +258,7 @@ def process_response(request, survey_id):
             topic_hard_coded = params_dict["interview_plan"][current_topic_index]["initial_question"]
             next_question += "\n"
             next_question += "\n"
+            
             next_question += topic_hard_coded
             print(f"[DEBUG HACK] Overriding transition with raw topic text")
             
