@@ -10,7 +10,7 @@ import time
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from .testing_params import TEST_PARAMS, TEST_PARAMS_VERBOSE
+from .testing_params import TEST_PARAMS
 from .self_eng_langgraph.multi_agent import get_response, test_create_agent
 
 # Toggle debug timing
@@ -140,6 +140,8 @@ def process_response(request, survey_id):
         #Initialize or retrive index of current topic
         current_topic_index = request.session.get(get_session_key(survey_id, 'current_topic_index'), 0)
         nr_questions_asked_current_topic = request.session.get(get_session_key(survey_id, 'nr_questions_asked_current_topic'), 0)
+        is_gatekeeper_pending = request.session.get(get_session_key(survey_id, 'is_gatekeeper_pending'), False)
+        extended_topic_length = request.session.get(get_session_key(survey_id, 'extended_topic_length'), None)
 
         # === DEBUG START ===
         print(f"[DEBUG] conversation_log length: {len(conversation_log)}")
@@ -159,6 +161,44 @@ def process_response(request, survey_id):
             print(f"[DEBUG] Added user message to log")
             # === DEBUG END ===
         
+        # Check if we're waiting for a gatekeeper response
+        if is_gatekeeper_pending and user_message and current_topic_index < len(params_dict.get("interview_plan", [])):
+            print(f"[DEBUG] Evaluating gatekeeper response")
+            from .self_eng_langgraph.multi_agent import get_gatekeeper_response
+            has_more = get_gatekeeper_response(params_dict, conversation_log, api_key)
+            
+            # Clear gatekeeper pending state
+            request.session[get_session_key(survey_id, 'is_gatekeeper_pending')] = False
+            
+            if has_more:
+                # Extend the topic by gatekeeping_time
+                gatekeeping_time = params_dict.get("gatekeeping_time", 2)
+                if extended_topic_length is None:
+                    # First extension - get original length
+                    original_length = params_dict["interview_plan"][current_topic_index]["length"]
+                    extended_topic_length = original_length + gatekeeping_time
+                else:
+                    # Additional extension
+                    extended_topic_length += gatekeeping_time
+                
+                request.session[get_session_key(survey_id, 'extended_topic_length')] = extended_topic_length
+                print(f"[DEBUG] Topic extended to {extended_topic_length} questions")
+                # Continue with normal question generation
+            else:
+                # No more to add - move to next topic
+                print(f"[DEBUG] Participant has no more to add, moving to next topic")
+                # Clear extended length
+                request.session.pop(get_session_key(survey_id, 'extended_topic_length'), None)
+                current_topic_index += 1
+                nr_questions_asked_current_topic = 0
+                request.session[get_session_key(survey_id, 'current_topic_index')] = current_topic_index
+                request.session[get_session_key(survey_id, 'nr_questions_asked_current_topic')] = 0
+                
+                # Check for pre-generated transition in cache
+                transition = cache.get(f'transition_{respondent_id}_{current_topic_index}')
+                if transition:
+                    request.session[get_session_key(survey_id, 'pre_generated_transition')] = transition
+                    cache.delete(f'transition_{respondent_id}_{current_topic_index}')
         
         
         # === DEBUG START ===
@@ -167,6 +207,9 @@ def process_response(request, survey_id):
         print(f"[DEBUG] api_key exists: {api_key is not None}")
         t_before_get_response = time.time()
         # === DEBUG END ===
+        
+        # Initialize should_ask_gatekeeper - will be set later after we increment question count
+        should_ask_gatekeeper = False
         
         # Check if this is the first question (conversation_log is empty or only has 1 item - the user's first message)
         if len(conversation_log) <= 1 and 'first_question' in params_dict:
@@ -198,6 +241,44 @@ def process_response(request, survey_id):
             else:
                 next_question = params_dict["end_of_interview_message"]
                 print(f"[DEBUG] All closing questions complete")
+        
+        # Check if we should ask gatekeeper question (before generating next question)
+        # This happens when: we've asked all questions (nr_questions_asked_current_topic == topic_length)
+        # AND the user has just responded (user_message exists)
+        elif (current_topic_index < len(params_dict.get("interview_plan", [])) 
+              and not is_gatekeeper_pending 
+              and user_message
+              and "gatekeeper_question" in params_dict 
+              and "topic_desc_list" in params_dict):
+            # Use extended topic length if available, otherwise use original length
+            original_topic_length = params_dict["interview_plan"][current_topic_index]["length"]
+            current_topic_length = extended_topic_length if extended_topic_length is not None else original_topic_length
+            
+            print(f"[DEBUG GATEKEEPER] Checking: topic={current_topic_index}, asked={nr_questions_asked_current_topic}, length={current_topic_length}, extended={extended_topic_length}")
+            
+            # Check if we've completed all questions for this topic
+            # nr_questions_asked_current_topic is the count from the PREVIOUS request
+            # So if it equals or exceeds topic_length, we've just asked the last question and user has responded
+            if nr_questions_asked_current_topic >= current_topic_length:
+                topic_desc_list = params_dict["topic_desc_list"]
+                if current_topic_index < len(topic_desc_list):
+                    topic_desc_dict = topic_desc_list[current_topic_index]
+                    short_topic = list(topic_desc_dict.values())[0] if topic_desc_dict else ""
+                    next_question = params_dict["gatekeeper_question"].format(short_topic=short_topic)
+                    
+                    # Set gatekeeper pending state
+                    request.session[get_session_key(survey_id, 'is_gatekeeper_pending')] = True
+                    is_gatekeeper_pending = True
+                    should_ask_gatekeeper = True
+                    print(f"[DEBUG GATEKEEPER] ✓ Asking gatekeeper question: {next_question}")
+                else:
+                    # No topic desc available, generate normal question
+                    print(f"[DEBUG GATEKEEPER] ✗ No topic desc for index {current_topic_index}")
+                    next_question = get_response(params_dict, current_topic_index, conversation_log, api_key)
+            else:
+                # Not at end of topic yet, generate normal question
+                print(f"[DEBUG GATEKEEPER] ✗ Not complete: {nr_questions_asked_current_topic} < {current_topic_length}")
+                next_question = get_response(params_dict, current_topic_index, conversation_log, api_key)
         
         # Check if we have a pre-generated transition question (first question of new topic)
         elif nr_questions_asked_current_topic == 0 and current_topic_index > 0 and current_topic_index < len(params_dict["interview_plan"]):
@@ -245,13 +326,19 @@ def process_response(request, survey_id):
         # === DEBUG END ===
         
         # Append AI's question to conversation log
+        # Skip if we already added the gatekeeper question to the log
         t_before_session = time.time()
-        conversation_log.append({
-            'order': len(conversation_log),
-            'is_question': 1,
-            'content': next_question,
-            'topic': current_topic_index,
-        })
+        if not should_ask_gatekeeper:
+            conversation_log.append({
+                'order': len(conversation_log),
+                'is_question': 1,
+                'content': next_question,
+                'topic': current_topic_index,
+            })
+        else:
+            # Gatekeeper question was already added to log, just update the order if needed
+            if conversation_log and conversation_log[-1].get('is_question') in ('1', 1, True):
+                conversation_log[-1]['order'] = len(conversation_log) - 1
         
         # Save updated conversation log to session
         request.session[get_session_key(survey_id, 'conversation_log')] = conversation_log
@@ -263,9 +350,53 @@ def process_response(request, survey_id):
             request.session[get_session_key(survey_id, 'closing_question_index')] = closing_question_index + 1
         elif current_topic_index < len(params_dict["interview_plan"]):
             # Normal topic progression
-            nr_questions_asked_current_topic += 1
+            # Don't increment if we just asked a gatekeeper question (it's not a regular topic question)
+            if not should_ask_gatekeeper:
+                nr_questions_asked_current_topic += 1
             
-            topic_length = params_dict["interview_plan"][current_topic_index]["length"]
+            # Use extended topic length if available, otherwise use original length
+            original_topic_length = params_dict["interview_plan"][current_topic_index]["length"]
+            topic_length = extended_topic_length if extended_topic_length is not None else original_topic_length
+            
+            # Check if we should ask gatekeeper question NOW (after incrementing, before moving to next topic)
+            # This happens when: we've just asked the last question (nr_questions_asked_current_topic == topic_length)
+            # AND the user has responded (user_message exists)
+            # AND gatekeeper is enabled
+            if (nr_questions_asked_current_topic == topic_length 
+                and not is_gatekeeper_pending 
+                and not should_ask_gatekeeper
+                and user_message
+                and "gatekeeper_question" in params_dict 
+                and "topic_desc_list" in params_dict):
+                # Replace the question with gatekeeper question
+                topic_desc_list = params_dict["topic_desc_list"]
+                if current_topic_index < len(topic_desc_list):
+                    topic_desc_dict = topic_desc_list[current_topic_index]
+                    short_topic = list(topic_desc_dict.values())[0] if topic_desc_dict else ""
+                    next_question = params_dict["gatekeeper_question"].format(short_topic=short_topic)
+                    
+                    # Remove the last question from conversation log and replace with gatekeeper question
+                    if conversation_log and conversation_log[-1].get('is_question') in ('1', 1, True):
+                        conversation_log.pop()
+                    
+                    # Add gatekeeper question to conversation log immediately so it's available for gatekeeper LLM
+                    conversation_log.append({
+                        'order': len(conversation_log),
+                        'is_question': 1,
+                        'content': next_question,
+                        'topic': current_topic_index,
+                    })
+                    
+                    # Save updated conversation log to session so gatekeeper question is available for gatekeeper LLM
+                    request.session[get_session_key(survey_id, 'conversation_log')] = conversation_log
+                    
+                    # Set gatekeeper pending state
+                    request.session[get_session_key(survey_id, 'is_gatekeeper_pending')] = True
+                    is_gatekeeper_pending = True
+                    should_ask_gatekeeper = True
+                    # Decrement count since gatekeeper question doesn't count
+                    nr_questions_asked_current_topic -= 1
+                    print(f"[DEBUG GATEKEEPER] ✓ Replaced question with gatekeeper: {next_question}")
             
             # Pre-generate transition and warm cache if this is the last question of current topic
             if nr_questions_asked_current_topic == topic_length and current_topic_index + 1 < len(params_dict["interview_plan"]) and params_dict["pre_gen_transitions"]:
@@ -288,9 +419,13 @@ def process_response(request, survey_id):
                 except Exception as e:
                     print(f"[DEBUG] Transition pre-generation/warming failed (non-critical): {e}")
             
-            if nr_questions_asked_current_topic >= topic_length:
+            # Only move to next topic if gatekeeper is not pending
+            # Gatekeeper handles topic transition when participant says they have nothing more to add
+            if nr_questions_asked_current_topic >= topic_length and not is_gatekeeper_pending:
+                # Gatekeeper not enabled or already evaluated, move to next topic
                 current_topic_index += 1
                 nr_questions_asked_current_topic = 0
+                request.session.pop(get_session_key(survey_id, 'extended_topic_length'), None)
                 
                 # Check for pre-generated transition in cache
                 transition = cache.get(f'transition_{respondent_id}_{current_topic_index}')

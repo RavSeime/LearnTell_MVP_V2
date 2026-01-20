@@ -178,7 +178,82 @@ def get_response(params, current_topic_index, conversation_log, key, debug_cachi
     # === DEBUG END ===
     
     # Return the content string
-    return response.content 
+    return response.content
+
+def get_gatekeeper_response(params, conversation_log, key, debug_caching=True):
+    """
+    Evaluate if the participant indicates they have more information to add.
+    Returns True if participant has more to add, False if they're done.
+    """
+    import time
+    from langchain.chat_models import init_chat_model
+    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+    
+    t_start = time.time()
+    
+    # Cache key based on model config
+    cache_key = (
+        params["gatekeeper_llm"]["model"],
+        params["gatekeeper_llm"]["model_provider"],
+        tuple(sorted(params["gatekeeper_llm"]["kwargs"].items()))
+    )
+    
+    t_before_init = time.time()
+    # Check cache first
+    if cache_key in _model_cache:
+        gatekeeper_llm = _model_cache[cache_key]
+        print(f"[TIMING] init_chat_model (gatekeeper): 0.00ms (cached)")
+    else:
+        # Add API key to kwargs and unpack them
+        model_kwargs = {**params["gatekeeper_llm"]["kwargs"], "api_key": key}
+        
+        gatekeeper_llm = init_chat_model(
+            model=params["gatekeeper_llm"]["model"],
+            model_provider=params["gatekeeper_llm"]["model_provider"],
+            **model_kwargs
+        )
+        _model_cache[cache_key] = gatekeeper_llm
+        t_after_init = time.time()
+        print(f"[TIMING] init_chat_model (gatekeeper): {(t_after_init - t_before_init) * 1000:.2f}ms (created)")
+    
+    t_before_messages = time.time()
+    
+    # Use the gatekeeper prompt
+    system_prompt = params["gatekeeper_llm"]["prompt"]
+    
+    messages = [SystemMessage(content=system_prompt)]
+    messages.extend(
+        AIMessage(content=entry['content']) if entry.get('is_question') in ('1', 1, True)
+        else HumanMessage(content=entry['content'])
+        for entry in conversation_log
+    )
+    t_after_messages = time.time()
+    print(f"[TIMING] Building messages for gatekeeper ({len(messages)} msgs): {(t_after_messages - t_before_messages) * 1000:.2f}ms")
+    
+    # Invoke the LLM
+    t_before_invoke = time.time()
+    response = gatekeeper_llm.invoke(messages)
+    t_after_invoke = time.time()
+    print(f"[TIMING] Gatekeeper LLM invoke: {(t_after_invoke - t_before_invoke) * 1000:.2f}ms")
+    
+    # Parse the response - look for True or False
+    response_text = response.content.strip().upper()
+    
+    # Check for True/False in the response
+    has_more = False
+    if "TRUE" in response_text and "FALSE" not in response_text:
+        has_more = True
+    elif "FALSE" in response_text:
+        has_more = False
+    else:
+        # Default: if unclear, assume False (no more to add)
+        print(f"[DEBUG] Gatekeeper response unclear: {response.content}, defaulting to False")
+        has_more = False
+    
+    if debug_caching:
+        print(f"[DEBUG] Gatekeeper check result: has_more={has_more}")
+    
+    return has_more 
 
 def check_engagement(params, current_topic_index, conversation_log, key, debug_caching=True):
     """
