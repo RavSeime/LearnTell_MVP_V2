@@ -21,7 +21,7 @@ body {
 
 /* Prototype Badge */
 body::before {
-    content: 'IntervjuBot Prototype V1.1';
+    content: 'IntervjuBot Prototype V1.2';
     position: fixed;
     top: 20px;
     right: 20px;
