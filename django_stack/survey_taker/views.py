@@ -147,6 +147,12 @@ def process_response(request, survey_id):
         print(f"[DEBUG] conversation_log length: {len(conversation_log)}")
         print(f"current_topic_index Pre Stack {current_topic_index}")
         print(f"nr_questions_asked_current_topic Pre Stack {nr_questions_asked_current_topic}")
+        print(f"is_gatekeeper_pending: {is_gatekeeper_pending}")
+        # Show last question in log if any
+        if conversation_log:
+            last_question = [e for e in conversation_log if e.get('is_question') in ('1', 1, True)]
+            if last_question:
+                print(f"[DEBUG] Last question in log: {last_question[-1]['content'][:100]}")
         # === DEBUG END ===
 
         # Append user's answer if they provided one
@@ -164,6 +170,16 @@ def process_response(request, survey_id):
         # Check if we're waiting for a gatekeeper response
         if is_gatekeeper_pending and user_message and current_topic_index < len(params_dict.get("interview_plan", [])):
             print(f"[DEBUG] Evaluating gatekeeper response")
+            # Debug: Check if gatekeeper question is in conversation log
+            gatekeeper_questions = [entry for entry in conversation_log if entry.get('is_question') in ('1', 1, True) and 'gatekeeper' in entry.get('content', '').lower()]
+            print(f"[DEBUG] Gatekeeper questions in log: {len(gatekeeper_questions)}")
+            if gatekeeper_questions:
+                print(f"[DEBUG] Last gatekeeper question: {gatekeeper_questions[-1]['content'][:100]}")
+            # Show last few entries in log
+            print(f"[DEBUG] Last 3 entries in conversation_log:")
+            for entry in conversation_log[-3:]:
+                print(f"  - {'Question' if entry.get('is_question') in ('1', 1, True) else 'Answer'}: {entry.get('content', '')[:80]}")
+            
             from .self_eng_langgraph.multi_agent import get_gatekeeper_response
             has_more = get_gatekeeper_response(params_dict, conversation_log, api_key)
             

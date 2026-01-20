@@ -230,6 +230,13 @@ def get_gatekeeper_response(params, conversation_log, key, debug_caching=True):
     t_after_messages = time.time()
     print(f"[TIMING] Building messages for gatekeeper ({len(messages)} msgs): {(t_after_messages - t_before_messages) * 1000:.2f}ms")
     
+    # Debug: Show last few messages to verify gatekeeper question is included
+    print(f"[DEBUG GATEKEEPER] Last 3 messages being sent to LLM:")
+    for msg in messages[-3:]:
+        msg_type = type(msg).__name__
+        content_preview = msg.content[:80] if hasattr(msg, 'content') else str(msg)[:80]
+        print(f"  - {msg_type}: {content_preview}")
+    
     # Invoke the LLM
     t_before_invoke = time.time()
     response = gatekeeper_llm.invoke(messages)
