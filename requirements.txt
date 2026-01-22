@@ -2,11 +2,12 @@ asgiref==3.8.1
 brotli==1.2.0
 dj-database-url==3.0.1
 Django==5.2.2
+gevent==24.11.1
 gunicorn==23.0.0
-langchain
-langchain-openai
-langgraph
-langsmith
+langchain==1.1.0
+langchain-openai==1.1.0
+langgraph==1.0.4
+langsmith==0.4.53
 packaging==25.0
 psycopg2-binary==2.9.11
 python-dotenv==1.0.0

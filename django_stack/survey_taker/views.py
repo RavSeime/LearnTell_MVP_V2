@@ -196,6 +196,7 @@ def process_response(request, survey_id):
             ).start()
             cache.set(cache_key, True, timeout=3600)
 
+        logger.debug("Using thread_id (respondent_id): %s", respondent_id)
         graph_config = {"configurable": {"thread_id": respondent_id}}
         input_message = [HumanMessage(content = user_message)]
         result = graph.invoke({"messages": input_message, "params" : params_dict_with_key}, config=graph_config)

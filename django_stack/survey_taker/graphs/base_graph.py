@@ -73,6 +73,8 @@ def standard_question_llm(state: dict):
                                                                                                 interview_meta["question_index"]
                                                                                             )
     
+    logger.debug(f"[standard_question_llm] interview_meta after update: {interview_meta}")
+    
     return {
         "messages": [
             prompter_model.invoke(
@@ -130,6 +132,8 @@ def transition_llm(state: dict):
     from langchain.messages import AIMessage
     response = transition_phrase.content + "\n\n" + topic_inital_question
 
+    logger.debug(f"[transition_llm] interview_meta after update: {interview_meta}")
+
     return {
         "messages": [
             AIMessage(content=response)
@@ -153,6 +157,8 @@ def first_question_node(state: dict):
     # Get the first topic and its initial question
     first_question = state["params"]["interview_plan"][0]["initial_question"]
     
+    logger.debug(f"[first_question_node] interview_meta after update: {interview_meta}")
+    
     return {
         "messages": [
             AIMessage(content=first_question)
@@ -166,6 +172,9 @@ def last_qustion_node(state: dict):
     from langchain.messages import AIMessage
     # You can add any specific logic for the last question here if needed
     last_question = state["params"]["end_of_interview_message"]
+    
+    logger.debug(f"[last_qustion_node] Reached end of interview")
+    
     return {
         "messages": [
             AIMessage(content=last_question)
@@ -192,6 +201,8 @@ def router_node(state: dict):
         next_node = "transition_llm"
     else:
         next_node = "standard_question_llm"
+
+    logger.debug(f"[router_node] interview_meta: {interview_meta}, next_node: {next_node}")
 
     return {"next_node": next_node}
 
