@@ -47,12 +47,21 @@ TEST_PARAMS = {
     },
     "gatekeeping_time" : 2,
     "gatekeeper_question" : "Do you have anything more you'd like to add to {short_topic}",
-    "topic_desc_list" : [
+    "gatekeeper_topic_list" : [
         {"topic_1" : "TOPIC1"},
         {"topic_2" : "TOPIC2"},
         {"topic_3" : "TOPIC3"},
         {"topic_4" : "TOPIC4"},
         {"topic_5" : "TOPIC5"},
         {"topic_6" : "TOPIC6"},
-    ]
+    ],
+    "engagement_llm": {
+        "model": "gpt-5.2",
+        "kwargs": {
+            "max_tokens": 500,
+            "temperature": 0.5
+        },
+        "prompt": "You are analyzing a participant's response in an interview to determine their engagement level. Your task is to assess whether the participant is still actively engaged with the current topic. Return True if the participant shows engagement (e.g., provides detailed answers, asks relevant questions, shows enthusiasm, makes connections to the topic, elaborates on points, or demonstrates active thinking). Return False if the participant shows disengagement (e.g., gives very short/minimal answers, responses like 'I don't know', 'Not sure', 'Maybe', shows reluctance, repeatedly deflects, gives off-topic responses, or signals they want to move on). Analyze the response carefully and respond with only True or False.",
+        "model_provider": "openai"
+    }
 }

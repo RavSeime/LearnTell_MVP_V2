@@ -27,14 +27,28 @@ DEBUG_TIMING = True
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# Get api key
-api_key = os.getenv('OPENAI_API_KEY')
+# Dictionary mapping key names to actual API keys
+llm_key_dict = {
+    "openai_api_key": os.getenv('OPENAI_API_KEY'),
+    "anthropic_api_key": os.getenv('ANTHROPIC_API_KEY'),
+    "google_api_key": os.getenv('GOOGLE_API_KEY'),
+    "azure_openai_api_key": os.getenv('AZURE_OPENAI_API_KEY'),
+    "meta_api_key": os.getenv('META_API_KEY'),
+    "mistral_api_key": os.getenv('MISTRAL_API_KEY'),
+    "cohere_api_key": os.getenv('COHERE_API_KEY'),
+    "groq_api_key": os.getenv('GROQ_API_KEY'),
+    "together_api_key": os.getenv('TOGETHER_API_KEY'),
+    "fireworks_api_key": os.getenv('FIREWORKS_API_KEY'),
+}
+
+# Azure OpenAI endpoint (separate from key)
+azure_openai_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
 
 # Log environment setup
 logger.debug(".env loaded from: %s", os.path.join(BASE_DIR, '.env'))
-logger.debug("OPENAI_API_KEY exists: %s", api_key is not None)
-if api_key:
-    logger.debug("API key starts with: %s...", api_key[:10])
+logger.debug("OPENAI_API_KEY exists: %s", llm_key_dict["openai_api_key"] is not None)
+if llm_key_dict["openai_api_key"]:
+    logger.debug("API key starts with: %s...", llm_key_dict["openai_api_key"][:10])
 
 
 # Function for importing graphs dynamically
@@ -182,9 +196,17 @@ def process_response(request, survey_id):
         
         logger.debug("Respondent ID: %s", respondent_id)
         
-        # Add API key to params_dict for graph nodes
+        # Select API key based on params_dict configuration
+        key_name = params_dict.get("api_key", "openai_api_key")  # Default to OpenAI
+        selected_api_key = llm_key_dict.get(key_name)
+        
+        # Add selected API key to params_dict for graph nodes
         params_dict_with_key = params_dict.copy()
-        params_dict_with_key["api_key"] = api_key
+        params_dict_with_key["api_key"] = selected_api_key
+        
+        # Add Azure endpoint if using Azure OpenAI
+        if key_name == "azure_openai_api_key":
+            params_dict_with_key["azure_openai_endpoint"] = azure_openai_endpoint
 
         # After getting graph and params_dict
         cache_key = f'warmed_{graph_key}_{survey_id}'

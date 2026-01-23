@@ -41,6 +41,16 @@ ALLOWED_HOSTS = [
     '.onrender.com',  # Allow any Render subdomain (leading dot = wildcard)
 ]
 
+# CSRF trusted origins for production
+CSRF_TRUSTED_ORIGINS = [
+    'https://mvp-tester.onrender.com',
+    'https://intervjubot-django.onrender.com',
+    'https://mvp1-1-optz.onrender.com',
+    'https://mvp1-2.onrender.com',
+    'https://learntell.app',
+    'https://*.onrender.com',  # Allow any Render subdomain
+]
+
 # Application definition
 
 INSTALLED_APPS = [

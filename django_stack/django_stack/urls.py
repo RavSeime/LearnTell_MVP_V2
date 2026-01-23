@@ -16,8 +16,15 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from django.http import JsonResponse
+
+def health_check(request):
+    """Health check endpoint for Render"""
+    return JsonResponse({"status": "healthy"})
 
 urlpatterns = [
+    path('', health_check),  # Root endpoint for health checks
+    path('health/', health_check),  # Alternative health check endpoint
     path('admin/', admin.site.urls),
     path('home/', include("home.urls") ), #Linking to the url configuration of home
     path('to_do_list/', include("to_do_list.urls")),
