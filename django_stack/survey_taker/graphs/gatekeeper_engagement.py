@@ -85,6 +85,7 @@ def standard_question_llm(state: dict):
         ],
         "interview_meta": interview_meta
     }
+    
 
 def transition_llm(state: dict):
     "This is the version that gives a short 'aha that is soo cool' and "
@@ -100,18 +101,15 @@ def transition_llm(state: dict):
         **state["params"]["transition_llm"]["kwargs"]
     )
     
+    interview_meta["topic_index"] += 1  # Move to the next topic for transition
+    interview_meta["question_index"] = 1  # Reset question index for the new topic
     #Get current topic
     topic_inital_question = state["params"]["interview_plan"][interview_meta["topic_index"]]["initial_question"]
 
     #Get current and next topic for transition prompt
-    current_topic = state["params"]["interview_plan"][interview_meta["topic_index"]]["topic"]
+    current_topic = state["params"]["interview_plan"][interview_meta["topic_index"]-1]["topic"]
     next_topic = state["params"]["interview_plan"][interview_meta["topic_index"]]["topic"]
 
-    #Incrementing index logic
-    interview_meta["topic_index"], interview_meta["question_index"] = indexer_progression(state["params"],
-                                                                                                interview_meta["topic_index"],
-                                                                                                interview_meta["question_index"]
-                                                                                            ) 
     transition_phrase = transition_model.invoke(
                 [
                     SystemMessage(
@@ -176,6 +174,74 @@ def last_qustion_node(state: dict):
         ],
     }
 
+
+def engagement_llm(state: dict):
+    "This checks if the user is engaged or not, returns True/False"
+    # Initialize model from params
+    engagement_model = init_chat_model(
+        state["params"]["engagement_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["engagement_llm"]["kwargs"]
+    )
+
+    engagement_response = engagement_model.invoke(
+                [
+                    SystemMessage(
+                        content=state["params"]["engagement_llm"]["prompt"]
+                    )
+                ]
+                + state["messages"]
+            )
+    # In engagement_llm function, return:
+    engagement_response = engagement_response.content.strip().lower() == "true"
+
+    if engagement_response:
+        next_node = "gatekeeper_question_node"
+
+        #elif not engaged and this is the last topic, go to last question
+    elif not engagement_response and state["interview_meta"]["topic_index"] == len(state["params"]["interview_plan"]) - 1:
+        next_node = "last_qustion_node"
+    
+    else: #We use else statement in case the engagmenet LLM returns something weird
+        next_node = "transition_llm"
+
+    return {"next_node": next_node}
+
+def gatekeeper_question_node(state: dict):
+    """Ask a fixed gatekeeper question based on the current topic."""
+    
+    from langchain.messages import AIMessage
+    
+    # Get interview_meta from state
+    interview_meta = state.get('interview_meta', {
+        "topic_index": 0, 
+        "question_index": 1,
+        "gatekeeper_candle": 0,
+        "just_asked_gatekeeper": False
+    })
+    
+    # Get the gatekeeper question template
+    gatekeeper_question_template = state["params"]["gatekeeper_question"]
+    
+    # Get the short topic from gatekeeper_topic_list based on current topic_index
+    topic_dict = state["params"]["gatekeeper_topic_list"][interview_meta["topic_index"]]
+    short_topic = list(topic_dict.values())[0]  # Get the first (and only) value from the dict
+    
+    # Format the question with the short topic
+    gatekeeper_question = gatekeeper_question_template.format(short_topic=short_topic)
+    
+    # Update metadata to track that we just asked a gatekeeper question
+    interview_meta["just_asked_gatekeeper"] = True
+    
+    logger.debug(f"[gatekeeper_question_node] interview_meta after update: {interview_meta}")
+    
+    return {
+        "messages": [
+            AIMessage(content=gatekeeper_question)
+        ],
+        "interview_meta": interview_meta
+    }
+
 def router_node(state: dict):
     """Router node to determine the next step in the interview process."""
     
@@ -187,18 +253,18 @@ def router_node(state: dict):
                                }) #Question index is started from 1, but topic index is started from zero
     topic_index = interview_meta["topic_index"]
     question_index = interview_meta["question_index"]
+    just_asked_gatekeeper = interview_meta["just_asked_gatekeeper"]
+    gatekeeper_candle = interview_meta["gatekeeper_candle"]
 
     #Check if its the first question overall
     if topic_index == 0 and question_index == 1:
         next_node = "first_question_node"
     
-    # Check if we've reached the end of the interview plan
-    elif topic_index >= len(state["params"]["interview_plan"]):
-        next_node = "last_qustion_node"
+    #Check if its we should check engagmenet. Check engament if current_question index is above topic lenght and gatekeeper candle is not 0
+    elif question_index > state["params"]["interview_plan"][topic_index]["length"] and gatekeeper_candle != 0:
+        next_node = "engagement_llm"
     
-    # Determine if it's the first question of a topic
-    elif question_index == 1:
-        next_node = "transition_llm"
+    
     else:
         next_node = "standard_question_llm"
 
@@ -218,20 +284,37 @@ agent_builder.add_node("standard_question_llm", standard_question_llm)
 agent_builder.add_node("first_question_node", first_question_node)
 agent_builder.add_node("last_qustion_node", last_qustion_node)
 agent_builder.add_node("transition_llm", transition_llm)
+agent_builder.add_node("engagement_llm", engagement_llm)
+agent_builder.add_node("gatekeeper_question_node", gatekeeper_question_node)
 agent_builder.add_edge(START, "router_node")
 
-def route_from_router_node(state: dict):
+
+def route_function(state: dict):
+    """Routing logic from the router node."""
+    return state.get("next_node")
+
+agent_builder.add_conditional_edges(
+    "engagement_llm",
+    route_function,
+    {
+        "gatekeeper_question_node": "gatekeeper_question_node",
+        "last_qustion_node": "last_qustion_node",
+        "transition_llm": "transition_llm"
+    }
+)
+
+def route_function(state: dict):
     """Routing logic from the router node."""
     return state.get("next_node")
 
 agent_builder.add_conditional_edges(
     "router_node", 
-    route_from_router_node,
+    route_function,
     {
         "first_question_node": "first_question_node",
-        "transition_llm": "transition_llm",
         "standard_question_llm": "standard_question_llm",
-        "last_qustion_node": "last_qustion_node"
+        "last_qustion_node": "last_qustion_node",
+        "engagement_llm": "engagement_llm"
     }
 )
 agent_builder.add_edge("standard_question_llm", END)
