@@ -1,6 +1,7 @@
 
 from langchain.chat_models import init_chat_model
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,24 @@ def indexer_progression(params: dict, topic_index: int, question_index: int):
     question_index += 1 
     
     return [topic_index, question_index]
+
+
+def calculate_progress_bar(params: dict, topic_index: int):
+    """Calculate progress bar percentage based on current topic vs total topics.
+    
+    inputs: params, topic_index
+    outputs: progress_bar_percent (0-100)
+    """
+    total_topics = len(params["interview_plan"])
+    if total_topics == 0:
+        return 0
+    
+    # Calculate percentage: current topic / total topics * 100
+    # Add 1 to topic_index since it's 0-indexed
+    progress = ((topic_index + 1) / total_topics) * 100
+    
+    # Round down to nearest integer and clamp between 0 and 100
+    return min(100, max(0, math.floor(progress)))
 
 
 class State(TypedDict):
@@ -328,13 +347,16 @@ def router_node(state: dict):
                                {"topic_index": 0, 
                                 "question_index": 1,
                                 "gatekeeper_candle" : 0,
-                                "just_asked_gatekeeper" : False
+                                "just_asked_gatekeeper" : False,
+                                "progress_bar_percent": 0
                                }) #Question index is started from 1, but topic index is started from zero
     topic_index = interview_meta["topic_index"]
     question_index = interview_meta["question_index"]
     just_asked_gatekeeper = interview_meta.get("just_asked_gatekeeper", False)
     gatekeeper_candle = interview_meta.get("gatekeeper_candle", 0)
 
+    # Calculate progress bar percentage
+    interview_meta["progress_bar_percent"] = calculate_progress_bar(state["params"], topic_index)
 
     banned_topics = [int(x) for x in state["params"].get("topics_banned_from_gatekeeping", [])] #Topics where we dont do engagement check, ensure all are ints
     
@@ -367,7 +389,7 @@ def router_node(state: dict):
 
     logger.debug(f"[router_node] interview_meta: {interview_meta}, next_node: {next_node}")
 
-    return {"next_node": next_node}
+    return {"next_node": next_node, "interview_meta": interview_meta}
 
 
 from typing import Literal

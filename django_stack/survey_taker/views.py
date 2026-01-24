@@ -58,6 +58,7 @@ GRAPH_MODULES = {
     "base_graph": "survey_taker.graphs.base_graph",
     "gatekeeper_engagement": "survey_taker.graphs.gatekeeper_engagement",
     "y": "survey_taker.graphs.y",
+    "gatekeeper_engagement_validation": "survey_taker.graphs.gatekeeper_engagement_validation",
 }
 
 def load_graph(graph_key: str):
@@ -224,12 +225,15 @@ def process_response(request, survey_id):
         result = graph.invoke({"messages": input_message, "params" : params_dict_with_key}, config=graph_config)
         
         next_question = result["messages"][-1].content
+        
+        # Extract progress bar from interview_meta if available
+        progress_bar = result.get("interview_meta", {}).get("progress_bar_percent", 0)
 
         response_data = {
             'message': next_question,
             'status': 'success',
             'respondent_id': respondent_id,
-            'total_questions': 2  # #HACK FOR INTERVIEW BAR
+            'progress_bar': progress_bar
         }
         
         if DEBUG_TIMING:

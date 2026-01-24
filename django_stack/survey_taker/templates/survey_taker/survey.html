@@ -48,18 +48,16 @@
     // Store conversation in frontend (for scalability - no DB writes until completion)
     let conversation = [];
     let messageOrder = 0;
-    let totalQuestions = 10; // #HACK FOR INTERVIEW BAR - Default fallback
     
-    // #HACK FOR INTERVIEW BAR - Simple progress tracking
-    function updateProgress() {
-      const userAnswers = conversation.filter(msg => msg.is_question === false).length;
+    // #HACK FOR INTERVIEW BAR - Update progress bar with backend percentage
+    function updateProgress(percentage) {
       const progressFill = document.getElementById('progressFill');
       const progressText = document.getElementById('progressText');
       if (progressFill && progressText) {
-        const percentage = Math.min(100, (userAnswers / totalQuestions) * 100);
-        progressFill.style.width = percentage + '%';
-        progressText.textContent = Math.round(percentage) + '%';
-        console.log(`Progress updated: ${userAnswers}/${totalQuestions} answers, ${Math.round(percentage)}%`);
+        const clampedPercentage = Math.max(0, Math.min(100, percentage));
+        progressFill.style.width = clampedPercentage + '%';
+        progressText.textContent = Math.round(clampedPercentage) + '%';
+        console.log(`Progress updated: ${clampedPercentage}%`);
       }
     }
     // #HACK FOR INTERVIEW BAR END
@@ -189,10 +187,9 @@
           const question = (data.message || "").trim();
           appendChatbotMessage(question, "response");
           
-          // #HACK FOR INTERVIEW BAR - Update total questions from API
-          if (data.total_questions) {
-            totalQuestions = data.total_questions;
-            console.log(`Total questions from API: ${totalQuestions}`);
+          // #HACK FOR INTERVIEW BAR - Update progress bar from API
+          if (data.progress_bar !== undefined) {
+            updateProgress(data.progress_bar);
           }
           // #HACK FOR INTERVIEW BAR END
           
@@ -234,10 +231,6 @@
               is_question: false
             });
             
-            // #HACK FOR INTERVIEW BAR - Update progress
-            updateProgress();
-            // #HACK FOR INTERVIEW BAR END
-            
             appendChatbotMessage("", "waiting");
             
             // Send to backend
@@ -255,6 +248,12 @@
             .then(response => response.json())
             .then(data => {
               let next_question = (data.message || "").trim();
+              
+              // #HACK FOR INTERVIEW BAR - Update progress bar from API
+              if (data.progress_bar !== undefined) {
+                updateProgress(data.progress_bar);
+              }
+              // #HACK FOR INTERVIEW BAR END
               
               // Store AI question in conversation
               messageOrder++;
