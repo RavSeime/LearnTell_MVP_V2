@@ -10,7 +10,7 @@ import time
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from .testing_params import TEST_PARAMS
+#from .testing_params import TEST_PARAMS
 from .self_eng_langgraph.multi_agent import get_response, test_create_agent
 
 import importlib
@@ -56,7 +56,7 @@ if llm_key_dict["openai_api_key"]:
 #Note that we need to hardcode this in
 GRAPH_MODULES = {
     "base_graph": "survey_taker.graphs.base_graph",
-    "x": "survey_taker.graphs.x",
+    "gatekeeper_engagement": "survey_taker.graphs.gatekeeper_engagement",
     "y": "survey_taker.graphs.y",
 }
 
