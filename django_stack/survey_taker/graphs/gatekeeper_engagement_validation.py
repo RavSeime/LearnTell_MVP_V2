@@ -18,7 +18,7 @@ The transition system prompt is warmed seperatly for every future transition.
 The transitions are NOT pre-generated
 """
 
-from langchain.messages import AnyMessage
+from langchain.messages import AnyMessage, AIMessage, SystemMessage
 from typing_extensions import TypedDict, Annotated
 import operator
 
@@ -150,7 +150,6 @@ def transition_llm(state: dict):
                 + state["messages"]
             )
     
-    from langchain.messages import AIMessage
     response = transition_phrase.content + "\n\n" + topic_inital_question
 
     logger.debug(f"[transition_llm] interview_meta after update: {interview_meta}")
@@ -164,8 +163,6 @@ def transition_llm(state: dict):
 
 def first_question_node(state: dict):
     """Node to ask the first question in the interview plan."""
-    
-    from langchain.messages import AIMessage
     
     # Initialize interview_meta
     interview_meta = {"topic_index": 0, "question_index": 1}  # Start from the first topic and first question
@@ -189,8 +186,6 @@ def first_question_node(state: dict):
 
 def last_qustion_node(state: dict):
     """Node to handle the last question in the interview plan."""
-    
-    from langchain.messages import AIMessage
     
     interview_meta = state.get('interview_meta', {
         "topic_index": 0, 
@@ -308,8 +303,6 @@ def gatekeeper_llm(state: dict):
 def gatekeeper_question_node(state: dict):
     """Ask a fixed gatekeeper question based on the current topic."""
     
-    from langchain.messages import AIMessage
-    
     # Get interview_meta from state
     interview_meta = state.get('interview_meta', {
         "topic_index": 0, 
@@ -338,6 +331,45 @@ def gatekeeper_question_node(state: dict):
             AIMessage(content=gatekeeper_question)
         ],
         "interview_meta": interview_meta
+    }
+
+def validation_llm(state: dict):
+    """Validates and prepends a brief validation statement to the latest message."""
+    
+    # Initialize model from params
+    validation_model = init_chat_model(
+        state["params"]["validation_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["validation_llm"]["kwargs"]
+    )
+    
+    # Get validation response
+    validation_response = validation_model.invoke(
+        [
+            SystemMessage(
+                content=state["params"]["validation_llm"]["prompt"]
+            )
+        ]
+        + state["messages"]
+    )
+    
+    # Get the latest message from state
+    latest_message = state["messages"][-1]
+    
+    # Prepend validation response to the latest message content with newline separator
+    modified_content = validation_response.content.strip() + "\n\n"  + latest_message.content
+    
+    # Create a new message with the modified content
+    modified_message = AIMessage(content=modified_content)
+    
+    # Replace the last message with the modified one
+    messages_list = list(state["messages"])
+    messages_list[-1] = modified_message
+    
+    logger.debug(f"[validation_llm] Prepended validation to latest message")
+    
+    return {
+        "messages": messages_list
     }
 
 def router_node(state: dict):
@@ -406,6 +438,7 @@ agent_builder.add_node("transition_llm", transition_llm)
 agent_builder.add_node("engagement_llm", engagement_llm)
 agent_builder.add_node("gatekeeper_question_node", gatekeeper_question_node)
 agent_builder.add_node("gatekeeper_llm", gatekeeper_llm)
+agent_builder.add_node("validation_llm", validation_llm)
 agent_builder.add_edge(START, "router_node")
 
 
@@ -450,8 +483,9 @@ agent_builder.add_conditional_edges(
     }
 )
 
-agent_builder.add_edge("gatekeeper_question_node", END)
-agent_builder.add_edge("standard_question_llm", END)
+agent_builder.add_edge("gatekeeper_question_node", "validation_llm")
+agent_builder.add_edge("standard_question_llm", "validation_llm")
+agent_builder.add_edge("validation_llm", END)
 agent_builder.add_edge("first_question_node", END)
 agent_builder.add_edge("last_qustion_node", END)
 agent_builder.add_edge("transition_llm", END)
@@ -473,7 +507,8 @@ def warm_llm_cache(params_dict):
         "standard_question_llm": lambda: _warm_standard_question(params_dict),
         "transition_llm": lambda: _warm_transition(params_dict),
         "engagement_llm": lambda: _warm_engagement(params_dict),
-        "gatekeeper_llm": lambda: _warm_gatekeeper(params_dict)
+        "gatekeeper_llm": lambda: _warm_gatekeeper(params_dict),
+        "validation_llm": lambda: _warm_validation(params_dict)
     }
     
     logger.info("Starting LLM cache warming")
@@ -565,6 +600,22 @@ def _warm_gatekeeper(params_dict):
     )
     gatekeeper_model.invoke([
         SystemMessage(content=params_dict["gatekeeper_llm"]["prompt"])
+    ])
+
+def _warm_validation(params_dict):
+    """Warm cache for validation LLM node."""
+    warm_kwargs = params_dict["validation_llm"]["kwargs"].copy()
+    warm_kwargs["max_tokens"] = 10
+    
+    logger.debug("Warming validation LLM")
+    
+    validation_model = init_chat_model(
+        params_dict["validation_llm"]["model"],
+        api_key=params_dict.get("api_key"),
+        **warm_kwargs
+    )
+    validation_model.invoke([
+        SystemMessage(content=params_dict["validation_llm"]["prompt"])
     ])
 
 
