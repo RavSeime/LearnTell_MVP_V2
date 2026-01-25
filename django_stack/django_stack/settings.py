@@ -193,5 +193,15 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+        "openai": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "httpx": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
     },
 }
