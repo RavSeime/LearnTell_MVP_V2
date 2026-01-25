@@ -58,6 +58,8 @@ GRAPH_MODULES = {
     "base_graph": "survey_taker.graphs.base_graph",
     "gatekeeper_engagement": "survey_taker.graphs.gatekeeper_engagement",
     "y": "survey_taker.graphs.y",
+    "gatekeeper_engagement_validation_v2": "survey_taker.graphs.gatekeeper_engagement_validation_v2",
+    "gatekeeper_engagement_validation_v3": "survey_taker.graphs.gatekeeper_engagement_validation_v3",
     "gatekeeper_engagement_validation": "survey_taker.graphs.gatekeeper_engagement_validation",
 }
 
@@ -87,12 +89,13 @@ def get_graph_cached(graph_key):
 
 def warm_graph_cache_if_available(graph_key, params_dict):
     """Warm LLM cache if the graph module provides a warming function."""
+    import asyncio
     try:
         module_path = GRAPH_MODULES.get(graph_key)
         mod = importlib.import_module(module_path)
         if hasattr(mod, 'warm_llm_cache'):
             logger.info("Starting LLM cache warming for graph_key=%s", graph_key)
-            mod.warm_llm_cache(params_dict)
+            asyncio.run(mod.warm_llm_cache(params_dict))
             logger.info("LLM cache warming completed for graph_key=%s", graph_key)
     except Exception as e:
         logger.exception("Cache warming failed for graph_key=%s", graph_key)
