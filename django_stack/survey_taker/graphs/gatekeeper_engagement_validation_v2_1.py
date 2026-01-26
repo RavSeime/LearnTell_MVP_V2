@@ -7,25 +7,14 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 """
-This is the most basic graph setup, which servers as a baseline skeleton for other graph setups
-Only LLM components are prompter and transition.
+This is like V2 but with the valiation gatekeer.
 
-It works of the standard param setup used in V1
 
-All caches are warmed at the start of the interview.
-The prompter system prompt cache is warmed once. ¨
-The transition system prompt is warmed seperatly for every future transition. 
-
-The transitions are NOT pre-generated
 """
 
 from langchain.messages import AnyMessage, AIMessage, SystemMessage
 from typing_extensions import TypedDict, Annotated
 import operator
-
-def get_last_n_messages(state: dict, n: int = 2) -> list[AnyMessage]:
-    """Get the last n messages from state."""
-    return state["messages"][-n:] if len(state["messages"]) >= n else state["messages"]
 
 def indexer_progression(params: dict, topic_index: int, question_index: int):
     """Speciall progression logic for gatekeeper_engagement setup.
@@ -71,6 +60,33 @@ class State(TypedDict):
 
 from langchain.messages import SystemMessage
 
+def validation_decision_llm(state: dict):
+    """Decides whether the user's message deserves validation."""
+    
+    # Initialize model from params
+    validation_decision_model = init_chat_model(
+        state["params"]["validation_decision_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["validation_decision_llm"]["kwargs"]
+    )
+    
+    # Get the last user message (should be the most recent HumanMessage)
+    decision_response = validation_decision_model.invoke(
+        [
+            SystemMessage(
+                content=state["params"]["validation_decision_llm"]["prompt"]
+            )
+        ]
+        + state["messages"]
+    )
+    
+    # Convert response to boolean
+    deserves_validation = decision_response.content.strip().upper() == "TRUE"
+    
+    logger.debug(f"[validation_decision_llm] deserves_validation: {deserves_validation}")
+    
+    return deserves_validation
+
 def standard_question_llm(state: dict):
 
     # Handle default values for interview_meta if not present
@@ -88,12 +104,6 @@ def standard_question_llm(state: dict):
         **state["params"]["prompter_llm"]["kwargs"]
     )
     
-    validation_model = init_chat_model(
-        state["params"]["validation_llm"]["model"],
-        api_key=state["params"].get("api_key"),
-        **state["params"]["validation_llm"]["kwargs"]
-    )
-    
     #Get current topic
     current_topic = state["params"]["interview_plan"][interview_meta["topic_index"]]["topic"]
 
@@ -109,35 +119,48 @@ def standard_question_llm(state: dict):
     
     logger.debug(f"[standard_question_llm] interview_meta after update: {interview_meta}")
     
-    # Run both LLM calls in parallel
-    async def run_parallel():
-        question_task = prompter_model.ainvoke(
-            [
-                SystemMessage(
-                    content=state["params"]["prompter_llm"]["prompt"].format(
-                        current_topic=current_topic
-                    )
+    # Check if validation should be added before followup
+    validation_before_followup = state["params"].get("validation_before_followup", False)
+    should_validate = False
+    
+    if validation_before_followup:
+        # Check if validation is deserved
+        should_validate = validation_decision_llm(state)
+    
+    # Generate question
+    question_response = prompter_model.invoke(
+        [
+            SystemMessage(
+                content=state["params"]["prompter_llm"]["prompt"].format(
+                    current_topic=current_topic
                 )
-            ]
-            + state["messages"]
+            )
+        ]
+        + state["messages"]
+    )
+    
+    # Conditionally add validation
+    if should_validate:
+        validation_model = init_chat_model(
+            state["params"]["validation_llm"]["model"],
+            api_key=state["params"].get("api_key"),
+            **state["params"]["validation_llm"]["kwargs"]
         )
         
-        validation_task = validation_model.ainvoke(
+        validation_response = validation_model.invoke(
             [
                 SystemMessage(
                     content=state["params"]["validation_llm"]["prompt"]
                 )
             ]
-            + get_last_n_messages(state, 2)
+            + state["messages"]
         )
         
-        return await asyncio.gather(question_task, validation_task)
-    
-    # Execute parallel calls
-    question_response, validation_response = asyncio.run(run_parallel())
-    
-    # Combine validation and question
-    combined_content = validation_response.content.strip() + "\n\n" + question_response.content
+        # Combine validation and question
+        combined_content = validation_response.content.strip() + "\n\n" + question_response.content
+    else:
+        # Just use the question
+        combined_content = question_response.content
     
     return {
         "messages": [
@@ -179,10 +202,39 @@ def transition_llm(state: dict):
                         )
                     )
                 ]
-                + get_last_n_messages(state, 2)
+                + state["messages"]
             )
     
-    response = transition_phrase.content + "\n\n" + topic_inital_question
+    # Check if validation should be added before transition
+    validation_before_transition = state["params"].get("validation_before_transition", False)
+    should_validate = False
+    
+    if validation_before_transition:
+        # Check if validation is deserved
+        should_validate = validation_decision_llm(state)
+    
+    # Conditionally add validation
+    if should_validate:
+        validation_model = init_chat_model(
+            state["params"]["validation_llm"]["model"],
+            api_key=state["params"].get("api_key"),
+            **state["params"]["validation_llm"]["kwargs"]
+        )
+        
+        validation_response = validation_model.invoke(
+            [
+                SystemMessage(
+                    content=state["params"]["validation_llm"]["prompt"]
+                )
+            ]
+            + state["messages"]
+        )
+        
+        # Combine validation, transition, and question
+        response = validation_response.content.strip() + "\n\n" + transition_phrase.content + "\n\n" + topic_inital_question
+    else:
+        # Just use transition and question
+        response = transition_phrase.content + "\n\n" + topic_inital_question
 
     logger.debug(f"[transition_llm] interview_meta after update: {interview_meta}")
 
@@ -261,7 +313,7 @@ def engagement_llm(state: dict):
                         content=state["params"]["engagement_llm"]["prompt"]
                     )
                 ]
-                + get_last_n_messages(state, 2)
+                + state["messages"]
             )
     # In engagement_llm function, return:
     engagement_response = engagement_response.content.strip().lower() == "true"
@@ -304,7 +356,7 @@ def gatekeeper_llm(state: dict):
                         content=state["params"]["gatekeeper_llm"]["prompt"]
                     )
                 ]
-                + get_last_n_messages(state, 2)
+                + state["messages"]
             )
     
     # Convert LLM string response to boolean
@@ -343,13 +395,6 @@ def gatekeeper_question_node(state: dict):
         "just_asked_gatekeeper": False
     })
     
-    # Initialize validation model
-    validation_model = init_chat_model(
-        state["params"]["validation_llm"]["model"],
-        api_key=state["params"].get("api_key"),
-        **state["params"]["validation_llm"]["kwargs"]
-    )
-    
     # Get the gatekeeper question template
     gatekeeper_question_template = state["params"]["gatekeeper_question"]
     
@@ -363,18 +408,37 @@ def gatekeeper_question_node(state: dict):
     # Update metadata to track that we just asked a gatekeeper question
     interview_meta["just_asked_gatekeeper"] = True
     
-    # Get validation response
-    validation_response = validation_model.invoke(
-        [
-            SystemMessage(
-                content=state["params"]["validation_llm"]["prompt"]
-            )
-        ]
-        + get_last_n_messages(state, 2)
-    )
+    # Check if validation should be added before gatekeeper question
+    # Use validation_before_followup for gatekeeper questions as well
+    validation_before_followup = state["params"].get("validation_before_followup", False)
+    should_validate = False
     
-    # Combine validation and question
-    combined_content = validation_response.content.strip() + "\n\n" + gatekeeper_question
+    if validation_before_followup:
+        # Check if validation is deserved
+        should_validate = validation_decision_llm(state)
+    
+    # Conditionally add validation
+    if should_validate:
+        validation_model = init_chat_model(
+            state["params"]["validation_llm"]["model"],
+            api_key=state["params"].get("api_key"),
+            **state["params"]["validation_llm"]["kwargs"]
+        )
+        
+        validation_response = validation_model.invoke(
+            [
+                SystemMessage(
+                    content=state["params"]["validation_llm"]["prompt"]
+                )
+            ]
+            + state["messages"]
+        )
+        
+        # Combine validation and question
+        combined_content = validation_response.content.strip() + "\n\n" + gatekeeper_question
+    else:
+        # Just use the question
+        combined_content = gatekeeper_question
     
     logger.debug(f"[gatekeeper_question_node] interview_meta after update: {interview_meta}")
     
@@ -520,6 +584,7 @@ async def warm_llm_cache(params_dict):
         _warm_engagement(params_dict),
         _warm_gatekeeper(params_dict),
         _warm_validation(params_dict),
+        _warm_validation_decision(params_dict),
         return_exceptions=True
     )
     
@@ -630,6 +695,25 @@ async def _warm_validation(params_dict):
     )
     await validation_model.ainvoke([
         SystemMessage(content=params_dict["validation_llm"]["prompt"])
+    ])
+
+async def _warm_validation_decision(params_dict):
+    """Warm cache for validation decision LLM node."""
+    if "validation_decision_llm" not in params_dict:
+        return
+    
+    warm_kwargs = params_dict["validation_decision_llm"]["kwargs"].copy()
+    warm_kwargs["max_tokens"] = 10
+    
+    logger.debug("Warming validation decision LLM")
+    
+    validation_decision_model = init_chat_model(
+        params_dict["validation_decision_llm"]["model"],
+        api_key=params_dict.get("api_key"),
+        **warm_kwargs
+    )
+    await validation_decision_model.ainvoke([
+        SystemMessage(content=params_dict["validation_decision_llm"]["prompt"])
     ])
 
 

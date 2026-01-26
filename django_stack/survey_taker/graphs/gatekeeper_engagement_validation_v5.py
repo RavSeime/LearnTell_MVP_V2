@@ -3,6 +3,7 @@ from langchain.chat_models import init_chat_model
 import logging
 import math
 import asyncio
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,91 @@ The transition system prompt is warmed seperatly for every future transition.
 The transitions are NOT pre-generated
 """
 
-from langchain.messages import AnyMessage, AIMessage, SystemMessage
+from langchain.messages import AnyMessage, AIMessage, SystemMessage, HumanMessage
 from typing_extensions import TypedDict, Annotated
 import operator
 
 def get_last_n_messages(state: dict, n: int = 2) -> list[AnyMessage]:
     """Get the last n messages from state."""
     return state["messages"][-n:] if len(state["messages"]) >= n else state["messages"]
+
+def moderate_with_retry(
+    generation_func,
+    moderator_model,
+    moderator_prompt: str,
+    original_prompt: str,
+    max_retries: int,
+    llm_name: str,
+    failed_moderation_message: str,
+    state: dict,
+    conversation_messages: list[AnyMessage]
+):
+    """
+    Generate content and moderate it with retries.
+    
+    Args:
+        generation_func: Callable that takes (prompt: str) and generates content synchronously
+        moderator_model: The moderator LLM model
+        moderator_prompt: The moderator's system prompt template (with {original_prompt} placeholder)
+        original_prompt: The original LLM's system prompt (without any feedback)
+        max_retries: Maximum number of retry attempts
+        llm_name: Name of the LLM for logging
+        failed_moderation_message: Message to prepend before justification
+        state: State dict containing messages
+        conversation_messages: The conversation messages that the generated content is responding to
+        
+    Returns:
+        The generated content that passed moderation (or last attempt if all fail)
+    """
+    current_prompt = original_prompt
+    
+    for attempt in range(max_retries):
+        # Generate content with current prompt (may include feedback)
+        generated_content = generation_func(current_prompt)
+        
+        # Debug: Log what messages we're passing to moderator
+        logger.debug(f"[{llm_name}] Conversation messages count: {len(conversation_messages)}")
+        for i, msg in enumerate(conversation_messages):
+            logger.debug(f"[{llm_name}] Message {i}: type={msg.__class__.__name__}, content_preview={msg.content[:50] if msg.content else 'empty'}...")
+        
+        # Prepare messages for moderator: conversation history + generated response
+        # The generated response is appended as an AIMessage (not yet in state)
+        moderator_messages = [
+            SystemMessage(
+                content=moderator_prompt.format(original_prompt=original_prompt)
+            )
+        ] + conversation_messages + [
+            AIMessage(content=generated_content.content)
+        ]
+        
+        logger.debug(f"[{llm_name}] Total moderator messages: {len(moderator_messages)}")
+        
+        # Moderate the content (synchronously)
+        moderation_result = moderator_model.invoke(moderator_messages)
+        
+        # Parse JSON response
+        try:
+            result_data = json.loads(moderation_result.content)
+            is_valid = result_data.get("passed", False)
+            justification = result_data.get("justification", "No justification provided")
+        except json.JSONDecodeError:
+            logger.error(f"[{llm_name}] Failed to parse moderator JSON response: {moderation_result.content}")
+            # Fallback to old behavior
+            is_valid = moderation_result.content.strip().lower() == "true"
+            justification = "Failed to parse moderation response"
+        
+        if is_valid:
+            logger.debug(f"[{llm_name}] Passed moderation on attempt {attempt + 1}. Justification: {justification}")
+            return generated_content
+        else:
+            logger.warning(f"[{llm_name}] Failed moderation on attempt {attempt + 1}/{max_retries}. Justification: {justification}")
+            
+            # Update prompt with feedback for next attempt
+            current_prompt = original_prompt + failed_moderation_message + justification
+    
+    # If all retries failed, return the last attempt
+    logger.error(f"[{llm_name}] All {max_retries} moderation attempts failed. Using last attempt.")
+    return generated_content
 
 def indexer_progression(params: dict, topic_index: int, question_index: int):
     """Speciall progression logic for gatekeeper_engagement setup.
@@ -94,6 +173,19 @@ def standard_question_llm(state: dict):
         **state["params"]["validation_llm"]["kwargs"]
     )
     
+    # Initialize moderator models
+    prompter_moderator_model = init_chat_model(
+        state["params"]["prompter_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["prompter_moderator_llm"]["kwargs"]
+    )
+    
+    validation_moderator_model = init_chat_model(
+        state["params"]["validation_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["validation_moderator_llm"]["kwargs"]
+    )
+    
     #Get current topic
     current_topic = state["params"]["interview_plan"][interview_meta["topic_index"]]["topic"]
 
@@ -109,32 +201,40 @@ def standard_question_llm(state: dict):
     
     logger.debug(f"[standard_question_llm] interview_meta after update: {interview_meta}")
     
-    # Run both LLM calls in parallel
-    async def run_parallel():
-        question_task = prompter_model.ainvoke(
-            [
-                SystemMessage(
-                    content=state["params"]["prompter_llm"]["prompt"].format(
-                        current_topic=current_topic
-                    )
-                )
-            ]
-            + state["messages"]
-        )
-        
-        validation_task = validation_model.ainvoke(
-            [
-                SystemMessage(
-                    content=state["params"]["validation_llm"]["prompt"]
-                )
-            ]
-            + get_last_n_messages(state, 2)
-        )
-        
-        return await asyncio.gather(question_task, validation_task)
+    # Prepare original prompts
+    prompter_original_prompt = state["params"]["prompter_llm"]["prompt"].format(current_topic=current_topic)
+    validation_original_prompt = state["params"]["validation_llm"]["prompt"]
     
-    # Execute parallel calls
-    question_response, validation_response = asyncio.run(run_parallel())
+    # Generate question with moderation
+    question_response = moderate_with_retry(
+        generation_func=lambda prompt: prompter_model.invoke(
+            [SystemMessage(content=prompt)] + state["messages"]
+        ),
+        moderator_model=prompter_moderator_model,
+        moderator_prompt=state["params"]["prompter_moderator_llm"]["prompt"],
+        original_prompt=prompter_original_prompt,
+        max_retries=state["params"]["prompter_moderator_max_retries"],
+        llm_name="prompter_llm",
+        failed_moderation_message=state["params"]["prompter_failed_moderation_message"],
+        state=state,
+        conversation_messages=state["messages"]
+    )
+    
+    # Generate validation with moderation
+    validation_response = moderate_with_retry(
+        generation_func=lambda prompt: validation_model.invoke(
+            [SystemMessage(content=prompt)] + get_last_n_messages(state, 2)
+        ),
+        moderator_model=validation_moderator_model,
+        moderator_prompt=state["params"]["validation_moderator_llm"]["prompt"],
+        original_prompt=validation_original_prompt,
+        max_retries=state["params"]["validation_moderator_max_retries"],
+        llm_name="validation_llm",
+        failed_moderation_message=state["params"]["validation_failed_moderation_message"],
+        state=state,
+        conversation_messages=[msg for msg in state["messages"] if msg.__class__.__name__ in ['HumanMessage', 'HumanMessageChunk']][-1:] if state["messages"] else []
+    )
+    
     
     # Combine validation and question
     combined_content = validation_response.content.strip() + "\n\n" + question_response.content
@@ -350,6 +450,13 @@ def gatekeeper_question_node(state: dict):
         **state["params"]["validation_llm"]["kwargs"]
     )
     
+    # Initialize validation moderator model
+    validation_moderator_model = init_chat_model(
+        state["params"]["validation_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["validation_moderator_llm"]["kwargs"]
+    )
+    
     # Get the gatekeeper question template
     gatekeeper_question_template = state["params"]["gatekeeper_question"]
     
@@ -363,14 +470,22 @@ def gatekeeper_question_node(state: dict):
     # Update metadata to track that we just asked a gatekeeper question
     interview_meta["just_asked_gatekeeper"] = True
     
-    # Get validation response
-    validation_response = validation_model.invoke(
-        [
-            SystemMessage(
-                content=state["params"]["validation_llm"]["prompt"]
-            )
-        ]
-        + get_last_n_messages(state, 2)
+    # Prepare original prompt
+    validation_original_prompt = state["params"]["validation_llm"]["prompt"]
+    
+    # Generate validation with moderation
+    validation_response = moderate_with_retry(
+        generation_func=lambda prompt: validation_model.invoke(
+            [SystemMessage(content=prompt)] + get_last_n_messages(state, 2)
+        ),
+        moderator_model=validation_moderator_model,
+        moderator_prompt=state["params"]["validation_moderator_llm"]["prompt"],
+        original_prompt=validation_original_prompt,
+        max_retries=state["params"]["validation_moderator_max_retries"],
+        llm_name="validation_llm_gatekeeper",
+        failed_moderation_message=state["params"]["validation_failed_moderation_message"],
+        state=state,
+        conversation_messages=[msg for msg in state["messages"] if msg.__class__.__name__ in ['HumanMessage', 'HumanMessageChunk']][-1:] if state["messages"] else []
     )
     
     # Combine validation and question

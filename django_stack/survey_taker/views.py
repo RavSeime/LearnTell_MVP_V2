@@ -59,7 +59,11 @@ GRAPH_MODULES = {
     "gatekeeper_engagement": "survey_taker.graphs.gatekeeper_engagement",
     "y": "survey_taker.graphs.y",
     "gatekeeper_engagement_validation_v2": "survey_taker.graphs.gatekeeper_engagement_validation_v2",
+    "gatekeeper_engagement_validation_v2_1": "survey_taker.graphs.gatekeeper_engagement_validation_v2_1",
     "gatekeeper_engagement_validation_v3": "survey_taker.graphs.gatekeeper_engagement_validation_v3",
+    "gatekeeper_engagement_validation_v4": "survey_taker.graphs.gatekeeper_engagement_validation_v4",
+    "gatekeeper_engagement_validation_v5": "survey_taker.graphs.gatekeeper_engagement_validation_v5",
+    "gatekeeper_engagement_validation_v6": "survey_taker.graphs.gatekeeper_engagement_validation_v6",
     "gatekeeper_engagement_validation": "survey_taker.graphs.gatekeeper_engagement_validation",
 }
 

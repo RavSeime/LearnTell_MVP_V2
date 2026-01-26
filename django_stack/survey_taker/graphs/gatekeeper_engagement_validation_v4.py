@@ -27,6 +27,52 @@ def get_last_n_messages(state: dict, n: int = 2) -> list[AnyMessage]:
     """Get the last n messages from state."""
     return state["messages"][-n:] if len(state["messages"]) >= n else state["messages"]
 
+async def moderate_with_retry(
+    generation_func,
+    moderator_model,
+    moderator_prompt: str,
+    original_prompt: str,
+    max_retries: int,
+    llm_name: str
+):
+    """
+    Generate content and moderate it with retries.
+    
+    Args:
+        generation_func: Async function that generates content, returns AIMessage or similar
+        moderator_model: The moderator LLM model
+        moderator_prompt: The moderator's system prompt template (with {original_prompt} placeholder)
+        original_prompt: The original LLM's system prompt
+        max_retries: Maximum number of retry attempts
+        llm_name: Name of the LLM for logging
+        
+    Returns:
+        The generated content that passed moderation (or last attempt if all fail)
+    """
+    for attempt in range(max_retries):
+        # Generate content
+        generated_content = await generation_func()
+        
+        # Moderate the content
+        moderation_result = await moderator_model.ainvoke([
+            SystemMessage(
+                content=moderator_prompt.format(original_prompt=original_prompt)
+            ),
+            AIMessage(content=generated_content.content)
+        ])
+        
+        is_valid = moderation_result.content.strip().lower() == "true"
+        
+        if is_valid:
+            logger.debug(f"[{llm_name}] Passed moderation on attempt {attempt + 1}")
+            return generated_content
+        else:
+            logger.warning(f"[{llm_name}] Failed moderation on attempt {attempt + 1}/{max_retries}")
+    
+    # If all retries failed, return the last attempt
+    logger.error(f"[{llm_name}] All {max_retries} moderation attempts failed. Using last attempt.")
+    return generated_content
+
 def indexer_progression(params: dict, topic_index: int, question_index: int):
     """Speciall progression logic for gatekeeper_engagement setup.
     inputs: params, topic_index, question_index
@@ -94,6 +140,19 @@ def standard_question_llm(state: dict):
         **state["params"]["validation_llm"]["kwargs"]
     )
     
+    # Initialize moderator models
+    prompter_moderator_model = init_chat_model(
+        state["params"]["prompter_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["prompter_moderator_llm"]["kwargs"]
+    )
+    
+    validation_moderator_model = init_chat_model(
+        state["params"]["validation_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["validation_moderator_llm"]["kwargs"]
+    )
+    
     #Get current topic
     current_topic = state["params"]["interview_plan"][interview_meta["topic_index"]]["topic"]
 
@@ -109,9 +168,9 @@ def standard_question_llm(state: dict):
     
     logger.debug(f"[standard_question_llm] interview_meta after update: {interview_meta}")
     
-    # Run both LLM calls in parallel
-    async def run_parallel():
-        question_task = prompter_model.ainvoke(
+    # Prepare generation functions for moderation
+    async def generate_question():
+        return await prompter_model.ainvoke(
             [
                 SystemMessage(
                     content=state["params"]["prompter_llm"]["prompt"].format(
@@ -121,8 +180,9 @@ def standard_question_llm(state: dict):
             ]
             + state["messages"]
         )
-        
-        validation_task = validation_model.ainvoke(
+    
+    async def generate_validation():
+        return await validation_model.ainvoke(
             [
                 SystemMessage(
                     content=state["params"]["validation_llm"]["prompt"]
@@ -130,11 +190,31 @@ def standard_question_llm(state: dict):
             ]
             + get_last_n_messages(state, 2)
         )
+    
+    # Run both LLM calls with moderation in parallel
+    async def run_parallel_with_moderation():
+        question_task = moderate_with_retry(
+            generation_func=generate_question,
+            moderator_model=prompter_moderator_model,
+            moderator_prompt=state["params"]["prompter_moderator_llm"]["prompt"],
+            original_prompt=state["params"]["prompter_llm"]["prompt"].format(current_topic=current_topic),
+            max_retries=state["params"]["prompter_moderator_max_retries"],
+            llm_name="prompter_llm"
+        )
+        
+        validation_task = moderate_with_retry(
+            generation_func=generate_validation,
+            moderator_model=validation_moderator_model,
+            moderator_prompt=state["params"]["validation_moderator_llm"]["prompt"],
+            original_prompt=state["params"]["validation_llm"]["prompt"],
+            max_retries=state["params"]["validation_moderator_max_retries"],
+            llm_name="validation_llm"
+        )
         
         return await asyncio.gather(question_task, validation_task)
     
-    # Execute parallel calls
-    question_response, validation_response = asyncio.run(run_parallel())
+    # Execute parallel calls with moderation
+    question_response, validation_response = asyncio.run(run_parallel_with_moderation())
     
     # Combine validation and question
     combined_content = validation_response.content.strip() + "\n\n" + question_response.content
@@ -350,6 +430,13 @@ def gatekeeper_question_node(state: dict):
         **state["params"]["validation_llm"]["kwargs"]
     )
     
+    # Initialize validation moderator model
+    validation_moderator_model = init_chat_model(
+        state["params"]["validation_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["validation_moderator_llm"]["kwargs"]
+    )
+    
     # Get the gatekeeper question template
     gatekeeper_question_template = state["params"]["gatekeeper_question"]
     
@@ -363,15 +450,29 @@ def gatekeeper_question_node(state: dict):
     # Update metadata to track that we just asked a gatekeeper question
     interview_meta["just_asked_gatekeeper"] = True
     
-    # Get validation response
-    validation_response = validation_model.invoke(
-        [
-            SystemMessage(
-                content=state["params"]["validation_llm"]["prompt"]
-            )
-        ]
-        + get_last_n_messages(state, 2)
-    )
+    # Prepare generation function for validation
+    async def generate_validation():
+        return await validation_model.ainvoke(
+            [
+                SystemMessage(
+                    content=state["params"]["validation_llm"]["prompt"]
+                )
+            ]
+            + get_last_n_messages(state, 2)
+        )
+    
+    # Get validation response with moderation
+    async def run_with_moderation():
+        return await moderate_with_retry(
+            generation_func=generate_validation,
+            moderator_model=validation_moderator_model,
+            moderator_prompt=state["params"]["validation_moderator_llm"]["prompt"],
+            original_prompt=state["params"]["validation_llm"]["prompt"],
+            max_retries=state["params"]["validation_moderator_max_retries"],
+            llm_name="validation_llm_gatekeeper"
+        )
+    
+    validation_response = asyncio.run(run_with_moderation())
     
     # Combine validation and question
     combined_content = validation_response.content.strip() + "\n\n" + gatekeeper_question

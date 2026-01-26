@@ -23,10 +23,6 @@ from langchain.messages import AnyMessage, AIMessage, SystemMessage
 from typing_extensions import TypedDict, Annotated
 import operator
 
-def get_last_n_messages(state: dict, n: int = 2) -> list[AnyMessage]:
-    """Get the last n messages from state."""
-    return state["messages"][-n:] if len(state["messages"]) >= n else state["messages"]
-
 def indexer_progression(params: dict, topic_index: int, question_index: int):
     """Speciall progression logic for gatekeeper_engagement setup.
     inputs: params, topic_index, question_index
@@ -128,7 +124,7 @@ def standard_question_llm(state: dict):
                     content=state["params"]["validation_llm"]["prompt"]
                 )
             ]
-            + get_last_n_messages(state, 2)
+            + state["messages"]
         )
         
         return await asyncio.gather(question_task, validation_task)
@@ -179,7 +175,7 @@ def transition_llm(state: dict):
                         )
                     )
                 ]
-                + get_last_n_messages(state, 2)
+                + state["messages"]
             )
     
     response = transition_phrase.content + "\n\n" + topic_inital_question
@@ -261,7 +257,7 @@ def engagement_llm(state: dict):
                         content=state["params"]["engagement_llm"]["prompt"]
                     )
                 ]
-                + get_last_n_messages(state, 2)
+                + state["messages"]
             )
     # In engagement_llm function, return:
     engagement_response = engagement_response.content.strip().lower() == "true"
@@ -304,7 +300,7 @@ def gatekeeper_llm(state: dict):
                         content=state["params"]["gatekeeper_llm"]["prompt"]
                     )
                 ]
-                + get_last_n_messages(state, 2)
+                + state["messages"]
             )
     
     # Convert LLM string response to boolean
@@ -370,7 +366,7 @@ def gatekeeper_question_node(state: dict):
                 content=state["params"]["validation_llm"]["prompt"]
             )
         ]
-        + get_last_n_messages(state, 2)
+        + state["messages"]
     )
     
     # Combine validation and question

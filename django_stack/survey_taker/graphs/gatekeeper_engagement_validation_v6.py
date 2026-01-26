@@ -3,6 +3,7 @@ from langchain.chat_models import init_chat_model
 import logging
 import math
 import asyncio
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,87 @@ The transition system prompt is warmed seperatly for every future transition.
 The transitions are NOT pre-generated
 """
 
-from langchain.messages import AnyMessage, AIMessage, SystemMessage
+from langchain.messages import AnyMessage, AIMessage, SystemMessage, HumanMessage
 from typing_extensions import TypedDict, Annotated
 import operator
 
 def get_last_n_messages(state: dict, n: int = 2) -> list[AnyMessage]:
     """Get the last n messages from state."""
     return state["messages"][-n:] if len(state["messages"]) >= n else state["messages"]
+
+async def moderate_with_retry(
+    generation_func,
+    moderator_model,
+    moderator_prompt: str,
+    original_prompt: str,
+    max_retries: int,
+    llm_name: str,
+    failed_moderation_message: str,
+    update_prompt_func=None,
+    context_messages=None
+):
+    """
+    Generate content and moderate it with retries.
+    
+    Args:
+        generation_func: Async function that generates content, returns AIMessage or similar
+        moderator_model: The moderator LLM model
+        moderator_prompt: The moderator's system prompt template (with {original_prompt} placeholder)
+        original_prompt: The original LLM's system prompt
+        max_retries: Maximum number of retry attempts
+        llm_name: Name of the LLM for logging
+        failed_moderation_message: Template message to append when moderation fails
+        update_prompt_func: Optional function to update the prompt with justification (takes updated_prompt string)
+        context_messages: Optional list of messages that provide context (the messages the original LLM was replying to)
+        
+    Returns:
+        The generated content that passed moderation (or last attempt if all fail)
+    """
+    for attempt in range(max_retries):
+        # Generate content
+        generated_content = await generation_func()
+        
+        # Build moderation messages: system prompt, then context messages (including human message), then AI response
+        moderation_messages = [
+            SystemMessage(
+                content=moderator_prompt.format(original_prompt=original_prompt)
+            )
+        ]
+        
+        # Add context messages if provided (these include the human message the original LLM was replying to)
+        if context_messages:
+            moderation_messages.extend(context_messages)
+        
+        # Add the generated AI message
+        moderation_messages.append(AIMessage(content=generated_content.content))
+        
+        # Moderate the content
+        moderation_result = await moderator_model.ainvoke(moderation_messages)
+        
+        # Parse JSON response
+        try:
+            moderation_data = json.loads(moderation_result.content.strip())
+            is_valid = moderation_data.get("passed", False)
+            justification = moderation_data.get("justification", "No justification provided")
+        except (json.JSONDecodeError, AttributeError):
+            # Fallback for non-JSON responses (backward compatibility)
+            is_valid = moderation_result.content.strip().lower() == "true"
+            justification = "Moderation check failed" if not is_valid else ""
+        
+        if is_valid:
+            logger.debug(f"[{llm_name}] Passed moderation on attempt {attempt + 1}")
+            return generated_content
+        else:
+            logger.warning(f"[{llm_name}] Failed moderation on attempt {attempt + 1}/{max_retries}. Justification: {justification}")
+            
+            # Update the prompt with the justification for the next retry (if not the last attempt)
+            if justification and not is_valid and attempt < max_retries - 1 and update_prompt_func:
+                updated_prompt = original_prompt + failed_moderation_message + justification
+                generation_func = update_prompt_func(updated_prompt)
+    
+    # If all retries failed, return the last attempt
+    logger.error(f"[{llm_name}] All {max_retries} moderation attempts failed. Using last attempt.")
+    return generated_content
 
 def indexer_progression(params: dict, topic_index: int, question_index: int):
     """Speciall progression logic for gatekeeper_engagement setup.
@@ -94,6 +169,19 @@ def standard_question_llm(state: dict):
         **state["params"]["validation_llm"]["kwargs"]
     )
     
+    # Initialize moderator models
+    prompter_moderator_model = init_chat_model(
+        state["params"]["prompter_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["prompter_moderator_llm"]["kwargs"]
+    )
+    
+    validation_moderator_model = init_chat_model(
+        state["params"]["validation_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["validation_moderator_llm"]["kwargs"]
+    )
+    
     #Get current topic
     current_topic = state["params"]["interview_plan"][interview_meta["topic_index"]]["topic"]
 
@@ -109,32 +197,67 @@ def standard_question_llm(state: dict):
     
     logger.debug(f"[standard_question_llm] interview_meta after update: {interview_meta}")
     
-    # Run both LLM calls in parallel
-    async def run_parallel():
-        question_task = prompter_model.ainvoke(
+    # Prepare generation functions for moderation with prompt update capability
+    base_question_prompt = state["params"]["prompter_llm"]["prompt"].format(current_topic=current_topic)
+    base_validation_prompt = state["params"]["validation_llm"]["prompt"]
+    
+    question_prompt = [base_question_prompt]
+    validation_prompt = [base_validation_prompt]
+    
+    async def generate_question():
+        return await prompter_model.ainvoke(
             [
-                SystemMessage(
-                    content=state["params"]["prompter_llm"]["prompt"].format(
-                        current_topic=current_topic
-                    )
-                )
+                SystemMessage(content=question_prompt[0])
             ]
             + state["messages"]
         )
-        
-        validation_task = validation_model.ainvoke(
+    
+    async def generate_validation():
+        return await validation_model.ainvoke(
             [
-                SystemMessage(
-                    content=state["params"]["validation_llm"]["prompt"]
-                )
+                SystemMessage(content=validation_prompt[0])
             ]
             + get_last_n_messages(state, 2)
+        )
+    
+    def update_question_prompt(updated_prompt):
+        question_prompt[0] = updated_prompt
+        return generate_question
+    
+    def update_validation_prompt(updated_prompt):
+        validation_prompt[0] = updated_prompt
+        return generate_validation
+    
+    # Run both LLM calls with moderation in parallel
+    async def run_parallel_with_moderation():
+        question_task = moderate_with_retry(
+            generation_func=generate_question,
+            moderator_model=prompter_moderator_model,
+            moderator_prompt=state["params"]["prompter_moderator_llm"]["prompt"],
+            original_prompt=base_question_prompt,
+            max_retries=state["params"]["prompter_moderator_max_retries"],
+            llm_name="prompter_llm",
+            failed_moderation_message=state["params"].get("prompter_failed_moderation_message", "\n\nIMPORTANT - Your previous attempt failed moderation. Please address the following issue:\n"),
+            update_prompt_func=update_question_prompt,
+            context_messages=state["messages"]
+        )
+        
+        validation_task = moderate_with_retry(
+            generation_func=generate_validation,
+            moderator_model=validation_moderator_model,
+            moderator_prompt=state["params"]["validation_moderator_llm"]["prompt"],
+            original_prompt=base_validation_prompt,
+            max_retries=state["params"]["validation_moderator_max_retries"],
+            llm_name="validation_llm",
+            failed_moderation_message=state["params"].get("validation_failed_moderation_message", "\n\nIMPORTANT - Your previous attempt failed moderation. Please address the following issue:\n"),
+            update_prompt_func=update_validation_prompt,
+            context_messages=get_last_n_messages(state, 2)
         )
         
         return await asyncio.gather(question_task, validation_task)
     
-    # Execute parallel calls
-    question_response, validation_response = asyncio.run(run_parallel())
+    # Execute parallel calls with moderation
+    question_response, validation_response = asyncio.run(run_parallel_with_moderation())
     
     # Combine validation and question
     combined_content = validation_response.content.strip() + "\n\n" + question_response.content
@@ -350,6 +473,13 @@ def gatekeeper_question_node(state: dict):
         **state["params"]["validation_llm"]["kwargs"]
     )
     
+    # Initialize validation moderator model
+    validation_moderator_model = init_chat_model(
+        state["params"]["validation_moderator_llm"]["model"],
+        api_key=state["params"].get("api_key"),
+        **state["params"]["validation_moderator_llm"]["kwargs"]
+    )
+    
     # Get the gatekeeper question template
     gatekeeper_question_template = state["params"]["gatekeeper_question"]
     
@@ -363,15 +493,37 @@ def gatekeeper_question_node(state: dict):
     # Update metadata to track that we just asked a gatekeeper question
     interview_meta["just_asked_gatekeeper"] = True
     
-    # Get validation response
-    validation_response = validation_model.invoke(
-        [
-            SystemMessage(
-                content=state["params"]["validation_llm"]["prompt"]
-            )
-        ]
-        + get_last_n_messages(state, 2)
-    )
+    # Prepare generation function for validation with prompt update capability
+    base_validation_prompt = state["params"]["validation_llm"]["prompt"]
+    validation_prompt = [base_validation_prompt]
+    
+    async def generate_validation():
+        return await validation_model.ainvoke(
+            [
+                SystemMessage(content=validation_prompt[0])
+            ]
+            + get_last_n_messages(state, 2)
+        )
+    
+    def update_validation_prompt(updated_prompt):
+        validation_prompt[0] = updated_prompt
+        return generate_validation
+    
+    # Get validation response with moderation
+    async def run_with_moderation():
+        return await moderate_with_retry(
+            generation_func=generate_validation,
+            moderator_model=validation_moderator_model,
+            moderator_prompt=state["params"]["validation_moderator_llm"]["prompt"],
+            original_prompt=base_validation_prompt,
+            max_retries=state["params"]["validation_moderator_max_retries"],
+            llm_name="validation_llm_gatekeeper",
+            failed_moderation_message=state["params"].get("validation_failed_moderation_message", "\n\nIMPORTANT - Your previous attempt failed moderation. Please address the following issue:\n"),
+            update_prompt_func=update_validation_prompt,
+            context_messages=get_last_n_messages(state, 2)
+        )
+    
+    validation_response = asyncio.run(run_with_moderation())
     
     # Combine validation and question
     combined_content = validation_response.content.strip() + "\n\n" + gatekeeper_question
