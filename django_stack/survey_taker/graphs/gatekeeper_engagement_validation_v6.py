@@ -8,16 +8,7 @@ import json
 logger = logging.getLogger(__name__)
 
 """
-This is the most basic graph setup, which servers as a baseline skeleton for other graph setups
-Only LLM components are prompter and transition.
-
-It works of the standard param setup used in V1
-
-All caches are warmed at the start of the interview.
-The prompter system prompt cache is warmed once. ¨
-The transition system prompt is warmed seperatly for every future transition. 
-
-The transitions are NOT pre-generated
+V6 introduces the ability for moderators to update the prompt based on the justification of the previous attempt.
 """
 
 from langchain.messages import AnyMessage, AIMessage, SystemMessage, HumanMessage
@@ -672,6 +663,8 @@ async def warm_llm_cache(params_dict):
         _warm_engagement(params_dict),
         _warm_gatekeeper(params_dict),
         _warm_validation(params_dict),
+        _warm_prompter_moderator(params_dict),
+        _warm_validation_moderator(params_dict),
         return_exceptions=True
     )
     
@@ -782,6 +775,56 @@ async def _warm_validation(params_dict):
     )
     await validation_model.ainvoke([
         SystemMessage(content=params_dict["validation_llm"]["prompt"])
+    ])
+
+async def _warm_prompter_moderator(params_dict):
+    """Warm cache for prompter moderator LLM node."""
+    if "prompter_moderator_llm" not in params_dict:
+        return
+    
+    warm_kwargs = params_dict["prompter_moderator_llm"]["kwargs"].copy()
+    warm_kwargs["max_tokens"] = 200  # Enough tokens for JSON response with justification
+    
+    logger.debug("Warming prompter moderator LLM")
+    
+    # Get a sample topic for formatting the prompt
+    sample_topic = params_dict["interview_plan"][0]["topic"] if params_dict["interview_plan"] else "sample topic"
+    sample_original_prompt = params_dict["prompter_llm"]["prompt"].format(current_topic=sample_topic)
+    
+    prompter_moderator_model = init_chat_model(
+        params_dict["prompter_moderator_llm"]["model"],
+        api_key=params_dict.get("api_key"),
+        **warm_kwargs
+    )
+    await prompter_moderator_model.ainvoke([
+        SystemMessage(
+            content=params_dict["prompter_moderator_llm"]["prompt"].format(
+                original_prompt=sample_original_prompt
+            )
+        )
+    ])
+
+async def _warm_validation_moderator(params_dict):
+    """Warm cache for validation moderator LLM node."""
+    if "validation_moderator_llm" not in params_dict:
+        return
+    
+    warm_kwargs = params_dict["validation_moderator_llm"]["kwargs"].copy()
+    warm_kwargs["max_tokens"] = 50  # Minimal tokens for moderation response
+    
+    logger.debug("Warming validation moderator LLM")
+    
+    validation_moderator_model = init_chat_model(
+        params_dict["validation_moderator_llm"]["model"],
+        api_key=params_dict.get("api_key"),
+        **warm_kwargs
+    )
+    await validation_moderator_model.ainvoke([
+        SystemMessage(
+            content=params_dict["validation_moderator_llm"]["prompt"].format(
+                original_prompt=params_dict["validation_llm"]["prompt"]
+            )
+        )
     ])
 
 
