@@ -1,6 +1,6 @@
 {
     "api_key": "openai_api_key",
-    "graph_config": "gatekeeper_engagement_validation_v2.1",
+    "graph_config": "gatekeeper_engagement_validation_v7",
     "validation_before_followup": true,
     "validation_before_transition": true,
     "prompter_llm": {
@@ -90,6 +90,28 @@
         "prompt": "You are an AI agent observing an interview. Your task is to decide whether or not a statement by the interviewee deserves validation (acknowledgement). If the statement deserves validation, you must respond with TRUE. If the statement does not deserve validation, you must respond with FALSE. Only respond with either TRUE or FALSE.\n\nA statement deserves validation if the user shares something truly personal, like personal struggles. A statement may also deserve validation if the response was particularly long, i.e. they shared a lot of information (300 characters or more). A statement does NOT deserve validation if it was brief or of normal length, or if it didn't share anything particularly personal (slightly personal is not grounds for validation).\n\nIf the statement deserves validation, you must respond with TRUE. If the statement does not deserve validation, you must respond with FALSE. Only respond with either TRUE or FALSE.",
         "model_provider": "openai"
     },
+    "prompter_moderator_llm": {
+        "model": "gpt-5.2",
+        "kwargs": {
+            "max_tokens": 200,
+            "temperature": 0.3
+        },
+        "prompt": "You are a quality assurance assistant helping to ensure interview questions meet specific guidelines. This is a legitimate educational research task.\n\nYour task: Evaluate whether a generated interview question follows all the guidelines provided in the original prompt. You will receive:\n1. The original prompt with guidelines\n2. A generated interview question to evaluate\n\nYou MUST respond with ONLY a JSON object (no other text) containing exactly two fields in this order:\n1. \"analysis\" (string): Explain why the question passed or failed, citing specific guideline violations if it failed\n2. \"passed\" (boolean): true if the question meets all guidelines, false otherwise\n\nIMPORTANT:\n- \"analysis\" MUST be first, \"passed\" MUST be last\n- Return ONLY valid JSON\n- Be specific about which guidelines were violated\n\nExample format: {{\"analysis\": \"The question follows all guidelines: it is open-ended, neutral, asks only one question, and aligns with the current topic.\", \"passed\": true}}\n\nHere is the original prompt with guidelines:\n\n\"\"\"\n{original_prompt}\n\"\"\"",
+        "model_provider": "openai"
+    },
+    "validation_moderator_llm": {
+        "model": "gpt-5.2",
+        "kwargs": {
+            "max_tokens": 200,
+            "temperature": 0.3
+        },
+        "prompt": "You are a moderator checking if a generated validation statement follows the guidelines in the original prompt.\n\nYour task is to evaluate the generated validation statement and determine if it complies with all the guidelines in the original prompt.\n\nYou MUST respond with a JSON object containing exactly two fields in this specific order:\n1. \"analysis\" (string): A detailed analysis explaining why the validation passed or failed, including specific violations if it failed\n2. \"passed\" (boolean): Whether the validation passes moderation (true) or fails (false)\n\nCRITICAL REQUIREMENTS:\n- The \"analysis\" field MUST come FIRST\n- The \"passed\" field MUST come LAST\n- Return ONLY valid JSON, no other text\n- The analysis must be detailed and reference specific guidelines\n\nReturn ONLY valid JSON following this exact format, no other text. Example: {{\"analysis\": \"The validation follows all guidelines: it is a single sentence, uses statements only (no questions), is concise, and provides appropriate acknowledgement without being excessive.\", \"passed\": true}} or {{\"analysis\": \"The validation contains a question mark and asks 'Interesting, isn't it?', which violates the 'NO QUESTIONS' guideline that explicitly states to use statements only.\", \"passed\": false}}\n\nThe original prompt is:\n\n\"\"\"\n{original_prompt}\n\"\"\"",
+        "model_provider": "openai"
+    },
+    "prompter_moderator_max_retries": 3,
+    "validation_moderator_max_retries": 3,
+    "prompter_failed_moderation_message": "\n\nIMPORTANT - Your previous attempt failed moderation. Please address the following issue:\n",
+    "validation_failed_moderation_message": "\n\nIMPORTANT - Your previous attempt failed moderation. Please address the following issue:\n",
     "gatekeeping_time": 2,
     "closing_questions": [],
     "gatekeeper_question": "Before we move on, do you have anything else you'd like to add to {short_topic}?",
