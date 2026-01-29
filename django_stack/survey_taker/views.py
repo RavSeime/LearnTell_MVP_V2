@@ -65,6 +65,7 @@ GRAPH_MODULES = {
     "gatekeeper_engagement_validation_v5": "survey_taker.graphs.gatekeeper_engagement_validation_v5",
     "gatekeeper_engagement_validation_v6": "survey_taker.graphs.gatekeeper_engagement_validation_v6",
     "gatekeeper_engagement_validation_v7": "survey_taker.graphs.gatekeeper_engagement_validation_v7",
+    "gatekeeper_engagement_validation_v8": "survey_taker.graphs.gatekeeper_engagement_validation_v8",
     "gatekeeper_engagement_validation": "survey_taker.graphs.gatekeeper_engagement_validation",
 }
 
@@ -217,15 +218,17 @@ def process_response(request, survey_id):
         if key_name == "azure_openai_api_key":
             params_dict_with_key["azure_openai_endpoint"] = azure_openai_endpoint
 
-        # After getting graph and params_dict
-        cache_key = f'warmed_{graph_key}_{survey_id}'
-        if not cache.get(cache_key):
-            threading.Thread(
-                target=warm_graph_cache_if_available,
-                args=(graph_key, params_dict_with_key),
-                daemon=True
-            ).start()
-            cache.set(cache_key, True, timeout=3600)
+        # DISABLED: Cache warming causes "Event loop is closed" errors due to
+        # OpenAI SDK caching httpx connections bound to the warming thread's event loop.
+        # TODO: Fix by either making graph nodes fully sync or using a persistent event loop.
+        # cache_key = f'warmed_{graph_key}_{survey_id}'
+        # if not cache.get(cache_key):
+        #     threading.Thread(
+        #         target=warm_graph_cache_if_available,
+        #         args=(graph_key, params_dict_with_key),
+        #         daemon=True
+        #     ).start()
+        #     cache.set(cache_key, True, timeout=3600)
 
         logger.debug("Using thread_id (respondent_id): %s", respondent_id)
         graph_config = {"configurable": {"thread_id": respondent_id}}
