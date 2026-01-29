@@ -1,6 +1,6 @@
 {
     "api_key": "openai_api_key",
-    "graph_config": "gatekeeper_engagement_validation_v7",
+    "graph_config": "gatekeeper_engagement_validation_v8",
     "validation_before_followup": true,
     "validation_before_transition": true,
     "prompter_llm": {
@@ -28,7 +28,7 @@
             "max_tokens": 500,
             "temperature": 0.5
         },
-        "prompt": "You are analyzing a participant's response in an interview. Your task is to determine if the participant indicates they have more information to add. Return True if the participant's statement suggests they have more to say (e.g., phrases like 'I could also mention...', 'There's more...', 'Also...', 'One more thing...', 'Additionally...', 'I should add...', or similar indicators; or if the participant just starts sharing more information). Return False if the participant indicates they are done or have nothing more to add (e.g., 'No', 'That's all', 'Nothing else', 'I think that's it', 'That's everything', 'No, that's it', or similar completion signals). Analyze the response carefully and respond with only True or False.",
+        "prompt": "You are analyzing a participant's response in an interview. Your task is to determine if the participant indicates they have more information to add.\n\nAnalyze the participant's statement considering:\n- Does it contain indicators they have more to say? (e.g., 'I could also mention...', 'There's more...', 'Also...', 'Additionally...', 'I should add...')\n- Does it contain completion signals? (e.g., 'No', 'That's all', 'Nothing else', 'I think that's it', 'That's everything')\n\nYou MUST respond with ONLY a JSON object containing exactly two fields in this order:\n1. \"analysis\" (string): Brief explanation of your reasoning\n2. \"decision\" (boolean): true if participant has more to say, false if they are done\n\nExample: {\"analysis\": \"The participant said 'that's all I wanted to mention' which signals completion.\", \"decision\": false}",
         "model_provider": "openai"
     },
     "interview_plan": [
@@ -84,10 +84,10 @@
     "validation_decision_llm": {
         "model": "gpt-5.2",
         "kwargs": {
-            "max_tokens": 10,
+            "max_tokens": 150,
             "temperature": 0.3
         },
-        "prompt": "You are an AI agent observing an interview. Your task is to decide whether or not a statement by the interviewee deserves validation (acknowledgement). If the statement deserves validation, you must respond with TRUE. If the statement does not deserve validation, you must respond with FALSE. Only respond with either TRUE or FALSE.\n\nA statement deserves validation if the user shares something truly personal, like personal struggles. A statement may also deserve validation if the response was particularly long, i.e. they shared a lot of information (300 characters or more). A statement does NOT deserve validation if it was brief or of normal length, or if it didn't share anything particularly personal (slightly personal is not grounds for validation).\n\nIf the statement deserves validation, you must respond with TRUE. If the statement does not deserve validation, you must respond with FALSE. Only respond with either TRUE or FALSE.",
+        "prompt": "You are an AI agent observing an interview. Decide whether the interviewee's statement deserves validation (acknowledgement).\n\nAnalyze the statement considering:\n- Is it truly personal (sharing struggles, emotions)?\n- Is it particularly long (300+ characters)?\n\nA statement deserves validation if it shares something truly personal OR was particularly long. It does NOT deserve validation if brief/normal length without personal content.\n\nYou MUST respond with ONLY a JSON object containing exactly two fields in this order:\n1. \"analysis\" (string): Brief explanation of your reasoning\n2. \"decision\" (boolean): true if validation deserved, false if not\n\nExample: {\"analysis\": \"The response is brief (under 100 chars) and doesn't share personal struggles.\", \"decision\": false}",
         "model_provider": "openai"
     },
     "prompter_moderator_llm": {

@@ -27,3 +27,6 @@ media/
 *.swp
 *.swo
 *~
+
+# Claude
+.claude/
