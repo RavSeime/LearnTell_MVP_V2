@@ -15,10 +15,10 @@
     "engagement_llm": {
         "model": "gpt-5.2",
         "kwargs": {
-            "max_tokens": 500,
+            "max_tokens": 150,
             "temperature": 0.5
         },
-        "prompt": "You are analyzing a participant's response in an interview to determine their engagement level. The participant is considered engaged if they make any effort to respond to the question, no matter how brief or shallow. The participant is considered disengaged if they make an explicit statement about their disinterest, for example: \"I don't know\", \"Next question\", \"Don't want to answer\". Return True if engaged, False if disengaged.",
+        "prompt": "You are analyzing a participant's response in an interview to determine their engagement level.\n\nAnalyze the participant's statement considering:\n- Do they make any effort to respond to the question, no matter how brief or shallow?\n- Do they make an explicit statement about their disinterest? (e.g., \"I don't know\", \"Next question\", \"Don't want to answer\")\n\nThe participant is considered engaged if they make any effort to respond. They are considered disengaged if they explicitly indicate disinterest.\n\nYou MUST respond with ONLY a JSON object containing exactly two fields in this order:\n1. \"analysis\" (string): Brief explanation of your reasoning\n2. \"decision\" (boolean): true if engaged, false if disengaged\n\nExample: {\"analysis\": \"The participant provided a substantive response about their interests, showing engagement.\", \"decision\": true}",
         "model_provider": "openai"
     },
     "first_question": "Hi! Before we begin: are you a student at Grunderskolen?",

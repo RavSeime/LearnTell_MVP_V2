@@ -534,8 +534,8 @@ def engagement_llm(state: dict):
                 ]
                 + get_last_n_messages(state, 2)
             )
-    # In engagement_llm function, return:
-    engagement_response = engagement_response.content.strip().lower() == "true"
+    # Convert LLM string response to boolean
+    engagement_response = parse_decision_from_json(engagement_response.content, default=False)
 
     if engagement_response:
         next_node = "gatekeeper_question_node"
