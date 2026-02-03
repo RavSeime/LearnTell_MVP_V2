@@ -177,9 +177,9 @@ def validation_decision_llm(state: dict):
                 content=state["params"]["validation_decision_llm"]["prompt"]
             )
         ]
-        + state["messages"]
+        + get_last_n_messages(state, 2)
     )
-    
+
     # Convert response to boolean
     deserves_validation = parse_decision_from_json(decision_response.content, default=False)
     
@@ -283,7 +283,7 @@ def standard_question_llm(state: dict):
             llm_name="prompter_llm",
             failed_moderation_message=state["params"].get("prompter_failed_moderation_message", "\n\nIMPORTANT - Your previous attempt failed moderation. Please address the following issue:\n"),
             update_prompt_func=update_question_prompt,
-            context_messages=get_last_n_messages(state, 2)
+            context_messages=get_last_n_messages(state, 1)
         )
     
     # Validation pipeline: decision → generation → moderation
@@ -443,7 +443,7 @@ def transition_llm(state: dict):
                 llm_name="validation_llm_transition",
                 failed_moderation_message=state["params"].get("validation_failed_moderation_message", "\n\nIMPORTANT - Your previous attempt failed moderation. Please address the following issue:\n"),
                 update_prompt_func=update_validation_prompt,
-                context_messages=state["messages"]
+                context_messages=get_last_n_messages(state, 2)
             )
         
         # Generate validation with moderation (transition is already done)
